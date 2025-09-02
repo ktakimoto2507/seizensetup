@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@media print {
+  body { background: #fff; }
+  * { box-shadow: none !important; text-shadow: none !important; }
+  .no-print { display: none !important; }
+  .print:p-0 { padding: 0 !important; }
+}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
@@ -6,17 +6,17 @@ import { useAppStore, getPersisted, importPersisted, Persisted } from "@/lib/sto
 import { Stepper } from "@/components/stepper";
 
 export default function DataPage() {
-  // ストア�E�表示更新のために参�E�E�E
+  // 繧ｹ繝医い・郁｡ｨ遉ｺ譖ｴ譁ｰ縺ｮ縺溘ａ縺ｫ蜿ら・・・
   const state = useAppStore();
   const [jsonText, setJsonText] = useState("");
   const [msg, setMsg] = useState<string>("");
 
-  // 現在チE�Eタを常にJSONとして表示
+  // 迴ｾ蝨ｨ繝・・繧ｿ繧貞ｸｸ縺ｫJSON縺ｨ縺励※陦ｨ遉ｺ
   useEffect(() => {
     setJsonText(JSON.stringify(getPersisted(), null, 2));
-  }, [state]); // 何かが変わるたびに更新
+  }, [state]); // 菴輔°縺悟､峨ｏ繧九◆縺ｳ縺ｫ譖ｴ譁ｰ
 
-  // JSONをダウンローチE
+  // JSON繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝・
   function downloadJSON() {
     const blob = new Blob([jsonText], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -28,20 +28,20 @@ export default function DataPage() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    setMsg("JSONをダウンロードしました、E);
+    setMsg("JSON繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝峨＠縺ｾ縺励◆縲・);
   }
 
-  // クリチE�Eボ�Eドにコピ�E
+  // 繧ｯ繝ｪ繝・・繝懊・繝峨↓繧ｳ繝斐・
   async function copyJSON() {
     try {
       await navigator.clipboard.writeText(jsonText);
-      setMsg("クリチE�Eボ�Eドにコピ�Eしました、E);
+      setMsg("繧ｯ繝ｪ繝・・繝懊・繝峨↓繧ｳ繝斐・縺励∪縺励◆縲・);
     } catch {
-      setMsg("コピ�Eに失敗しました、E);
+      setMsg("繧ｳ繝斐・縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲・);
     }
   }
 
-  // ファイルから読み込み
+  // 繝輔ぃ繧､繝ｫ縺九ｉ隱ｭ縺ｿ霎ｼ縺ｿ
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -50,30 +50,30 @@ export default function DataPage() {
       try {
         const data = JSON.parse(String(reader.result)) as Persisted;
         importPersisted(data);
-        setMsg("ファイルから読み込みました、E);
+        setMsg("繝輔ぃ繧､繝ｫ縺九ｉ隱ｭ縺ｿ霎ｼ縺ｿ縺ｾ縺励◆縲・);
       } catch {
-        setMsg("読み込みに失敗しました�E�ESON形式を確認してください�E�、E);
+        setMsg("隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆・・SON蠖｢蠑上ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞・峨・);
       }
     };
     reader.readAsText(f, "utf-8");
-    e.currentTarget.value = ""; // 同じファイルでも�E選択できるように
+    e.currentTarget.value = ""; // 蜷後§繝輔ぃ繧､繝ｫ縺ｧ繧ょ・驕ｸ謚槭〒縺阪ｋ繧医≧縺ｫ
   }
 
-  // チE��ストエリアから復允E
+  // 繝・く繧ｹ繝医お繝ｪ繧｢縺九ｉ蠕ｩ蜈・
   function restoreFromTextarea() {
     try {
       const data = JSON.parse(jsonText) as Persisted;
       importPersisted(data);
-      setMsg("チE��ストから復允E��ました、E);
+      setMsg("繝・く繧ｹ繝医°繧牙ｾｩ蜈・＠縺ｾ縺励◆縲・);
     } catch {
-      setMsg("復允E��失敗しました�E�ESON形式を確認してください�E�、E);
+      setMsg("蠕ｩ蜈・↓螟ｱ謨励＠縺ｾ縺励◆・・SON蠖｢蠑上ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞・峨・);
     }
   }
 
-  // 全リセチE��
+  // 蜈ｨ繝ｪ繧ｻ繝・ヨ
   function resetAll() {
     useAppStore.getState().resetAll();
-    setMsg("すべてのチE�Eタを�E期化しました、E);
+    setMsg("縺吶∋縺ｦ縺ｮ繝・・繧ｿ繧貞・譛溷喧縺励∪縺励◆縲・);
   }
 
   return (
@@ -81,20 +81,20 @@ export default function DataPage() {
       <Stepper />
 
       <Card>
-        <CardHeader>チE�Eタのエクスポ�EチE/ インポ�EチE/CardHeader>
+        <CardHeader>繝・・繧ｿ縺ｮ繧ｨ繧ｯ繧ｹ繝昴・繝・/ 繧､繝ｳ繝昴・繝・/CardHeader>
         <CardContent><div className="space-y-4">
           <p className="text-sm text-gray-700">
-            下�EJSONは現在の入力データのスナップショチE��です。バチE��アチE�Eとして保存したり、別ブラウザで読み込んで続きから再開できます、E
+            荳九・JSON縺ｯ迴ｾ蝨ｨ縺ｮ蜈･蜉帙ョ繝ｼ繧ｿ縺ｮ繧ｹ繝翫ャ繝励す繝ｧ繝・ヨ縺ｧ縺吶ゅヰ繝・け繧｢繝・・縺ｨ縺励※菫晏ｭ倥＠縺溘ｊ縲∝挨繝悶Λ繧ｦ繧ｶ縺ｧ隱ｭ縺ｿ霎ｼ繧薙〒邯壹″縺九ｉ蜀埼幕縺ｧ縺阪∪縺吶・
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={downloadJSON}>JSONをダウンローチE/Button>
-            <Button type="button" onClick={copyJSON}>JSONをコピ�E</Button>
+            <Button type="button" onClick={downloadJSON}>JSON繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝・/Button>
+            <Button type="button" onClick={copyJSON}>JSON繧偵さ繝斐・</Button>
             <label className="inline-flex items-center gap-2 border rounded px-3 py-2 cursor-pointer">
               <input type="file" accept="application/json" className="hidden" onChange={handleFile} />
-              JSONファイルから読み込み
+              JSON繝輔ぃ繧､繝ｫ縺九ｉ隱ｭ縺ｿ霎ｼ縺ｿ
             </label>
-            <Button type="button" onClick={resetAll}>全リセチE��</Button>
+            <Button type="button" onClick={resetAll}>蜈ｨ繝ｪ繧ｻ繝・ヨ</Button>
           </div>
 
           <textarea
@@ -104,7 +104,7 @@ export default function DataPage() {
           />
 
           <div className="flex justify-end gap-2">
-            <Button type="button" onClick={restoreFromTextarea}>チE��ストから復允E/Button>
+            <Button type="button" onClick={restoreFromTextarea}>繝・く繧ｹ繝医°繧牙ｾｩ蜈・/Button>
           </div>
 
           {msg && <p className="text-sm text-green-700">{msg}</p>}
@@ -113,4 +113,5 @@ export default function DataPage() {
     </div>
   );
 }
+
 

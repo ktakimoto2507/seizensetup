@@ -28,7 +28,7 @@ export default function DataPage() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    setMsg("JSON繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝峨＠縺ｾ縺励◆縲・);
+    setMsg("JSON saved successfully.");
   }
 
   // 繧ｯ繝ｪ繝・・繝懊・繝峨↓繧ｳ繝斐・
@@ -113,6 +113,7 @@ export default function DataPage() {
     </div>
   );
 }
+
 
 
 

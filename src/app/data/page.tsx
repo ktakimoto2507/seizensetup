@@ -35,9 +35,9 @@ export default function DataPage() {
   async function copyJSON() {
     try {
       await navigator.clipboard.writeText(jsonText);
-      setMsg("繧ｯ繝ｪ繝・・繝懊・繝峨↓繧ｳ繝斐・縺励∪縺励◆縲・);
+      setMsg("Copied to clipboard.");
     } catch {
-      setMsg("繧ｳ繝斐・縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲・);
+      setMsg("Failed to copy to clipboard.");
     }
   }
 

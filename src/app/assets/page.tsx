@@ -1,10 +1,11 @@
 "use client";
 
+import { Input, Button } from "@/components/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore, Beneficiary } from "@/lib/store";
 import { lookupZip } from "@/lib/zipcloud";
 import { Stepper } from "@/components/stepper";
-import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
+import { Card, CardHeader, CardContent } from "@/components/ui";
 import { useRouter } from "next/navigation";
 
 // ルートガード：step < 2 なら適切なページへ戻す

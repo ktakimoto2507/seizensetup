@@ -108,11 +108,12 @@ export default function DataPage() {
           </div>
 
           {msg && <p className="text-sm text-green-700">{msg}</p>}
-        </div></CardContent>
+        </div></div></CardContent>
       </Card>
     </div>
   );
 }
+
 
 
 

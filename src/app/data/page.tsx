@@ -28,14 +28,14 @@ export default function DataPage() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    setMsg("JSON saved successfully.");
+    setMsg("JSONを保存しました。");
   }
 
   // 繧ｯ繝ｪ繝・・繝懊・繝峨↓繧ｳ繝斐・
   async function copyJSON() {
     try {
       await navigator.clipboard.writeText(jsonText);
-      setMsg("Copied to clipboard.");
+    setMsg("完了しました。");
     } catch {
       setMsg("Failed to copy to clipboard.");
     }
@@ -50,9 +50,8 @@ export default function DataPage() {
       try {
         const data = JSON.parse(String(reader.result)) as Persisted;
         importPersisted(data);
-        setMsg("繝輔ぃ繧､繝ｫ縺九ｉ隱ｭ縺ｿ霎ｼ縺ｿ縺ｾ縺励◆縲・);
-      } catch {
-        setMsg("隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆・・SON蠖｢蠑上ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞・峨・);
+        setMsg("完了しました。");
+      } catch {        setMsg("完了しました。");
       }
     };
     reader.readAsText(f, "utf-8");
@@ -64,16 +63,15 @@ export default function DataPage() {
     try {
       const data = JSON.parse(jsonText) as Persisted;
       importPersisted(data);
-      setMsg("繝・く繧ｹ繝医°繧牙ｾｩ蜈・＠縺ｾ縺励◆縲・);
-    } catch {
-      setMsg("蠕ｩ蜈・↓螟ｱ謨励＠縺ｾ縺励◆・・SON蠖｢蠑上ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞・峨・);
+        setMsg("完了しました。");
+    } catch {        setMsg("完了しました。");
     }
   }
 
   // 蜈ｨ繝ｪ繧ｻ繝・ヨ
   function resetAll() {
     useAppStore.getState().resetAll();
-    setMsg("縺吶∋縺ｦ縺ｮ繝・・繧ｿ繧貞・譛溷喧縺励∪縺励◆縲・);
+    setMsg("完了しました。");
   }
 
   return (
@@ -113,6 +111,7 @@ export default function DataPage() {
     </div>
   );
 }
+
 
 
 

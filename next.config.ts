@@ -3,11 +3,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   eslint: {
-    // ← ビルド時に ESLint エラーで落とさない（暫定）
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true, // ← これで Vercel ビルド時に ESLint エラーで落ちなくなる（暫定）
   },
-  // 必要なら TypeScript の型エラーも一時無視（できればOFFのままに）
-  // typescript: { ignoreBuildErrors: true },
+  // typescript: { ignoreBuildErrors: true }, // どうしても必要なら一時ON（通常はOFF推奨）
 };
 
 export default nextConfig;
+

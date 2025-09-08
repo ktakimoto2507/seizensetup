@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useAppStore } from "@/lib/store";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/button";
 // Stepperは不要（任意）。出すならSSR無効のdynamicで。
 
 export default function SuccessPage() {

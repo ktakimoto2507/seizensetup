@@ -3,8 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { Stepper } from "@/components/stepper";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Button, Card, CardHeader, CardContent } from "@/components/ui";
 
 export default function ReviewPage() {
   const router = useRouter();

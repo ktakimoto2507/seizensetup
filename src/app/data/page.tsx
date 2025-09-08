@@ -1,106 +1,83 @@
-﻿// src/app/data/page.tsx
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useAppStore, getPersisted, importPersisted, Persisted } from "@/lib/store";
+import { useEffect, useState } from "react";
 import { Stepper } from "@/components/stepper";
+import { useAppStore, getPersisted, importPersisted, Persisted } from "@/lib/store";
+
+// UI コンポーネントはファイル単位で明示的にインポート
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 
 export default function DataPage() {
-  // zustand の変更を検知するだけに利用（値は使わない）
+  // 画面の再描画トリガーとしてストアを読む
   const state = useAppStore();
 
-  // 表示用JSONとメッセージ
-  const [jsonText, setJsonText] = useState<string>("{}");
+  const [jsonText, setJsonText] = useState("");
   const [msg, setMsg] = useState<string>("");
 
-  // store が変わるたびに最新スナップショットを整形して表示
+  // 現在のデータを JSON 表示
   useEffect(() => {
-    try {
-      setJsonText(JSON.stringify(getPersisted(), null, 2));
-    } catch {
-      setJsonText("{}");
-    }
+    setJsonText(JSON.stringify(getPersisted(), null, 2));
   }, [state]);
 
-  // 画面内の JSON をきれいに整形（壊れていてもそのまま返す）
-  const pretty = useMemo(() => {
-    try {
-      return JSON.stringify(JSON.parse(jsonText), null, 2);
-    } catch {
-      return jsonText;
-    }
-  }, [jsonText]);
-
-  // JSON をダウンロード
+  // JSON ダウンロード
   function downloadJSON() {
-    try {
-      const blob = new Blob([pretty], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const ts = new Date().toISOString().replace(/[:.]/g, "-");
-      a.href = url;
-      a.download = `seizensetup-backup-${ts}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setMsg("JSONを保存しました。");
-    } catch {
-      setMsg("保存に失敗しました。");
-    }
+    const blob = new Blob([jsonText], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    a.href = url;
+    a.download = `seizensetup-backup-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setMsg("JSONを保存しました。");
   }
 
   // クリップボードへコピー
   async function copyJSON() {
     try {
-      await navigator.clipboard.writeText(pretty);
+      await navigator.clipboard.writeText(jsonText);
       setMsg("クリップボードにコピーしました。");
     } catch {
       setMsg("クリップボードへのコピーに失敗しました。");
     }
   }
 
-  // JSONファイルを読み込んで store に反映
+  // JSONファイル読込
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const text = String(reader.result ?? "");
-        const data = JSON.parse(text) as Persisted;
+        const data = JSON.parse(String(reader.result)) as Persisted;
         importPersisted(data);
-        setMsg("JSONを読み込みました。");
+        setMsg("ファイルから復元しました。");
       } catch {
-        setMsg("読み込みに失敗しました。JSONの形式を確認してください。");
-      } finally {
-        // 同じファイルを連続選択できるようリセット
-        e.currentTarget.value = "";
+        setMsg("復元に失敗しました（JSON形式をご確認ください）。");
       }
     };
     reader.readAsText(f, "utf-8");
+    e.currentTarget.value = ""; // 同じファイルを再選択できるように
   }
 
-  // 画面のテキストエリアから store に反映
+  // テキストエリアから復元
   function restoreFromTextarea() {
     try {
       const data = JSON.parse(jsonText) as Persisted;
       importPersisted(data);
-      setMsg("テキストから反映しました。");
+      setMsg("テキストから復元しました。");
     } catch {
-      setMsg("反映に失敗しました。JSONの形式を確認してください。");
+      setMsg("復元に失敗しました（JSON形式をご確認ください）。");
     }
   }
 
   // 全リセット
   function resetAll() {
-    try {
-      useAppStore.getState().resetAll();
-      setMsg("全データをリセットしました。");
-    } catch {
-      setMsg("リセットに失敗しました。");
-    }
+    useAppStore.getState().resetAll();
+    setMsg("すべてリセットしました。");
   }
 
   return (
@@ -110,27 +87,19 @@ export default function DataPage() {
       <Card>
         <CardHeader>データのエクスポート / インポート</CardHeader>
         <CardContent>
-          {/* CardContent に className を直接渡さず、内側でレイアウト */}
           <div className="space-y-4">
             <p className="text-sm text-gray-700">
               下の JSON は現在の入力データのスナップショットです。バックアップとして保存したり、
-              JSON ファイルから読み込んで続きから再開できます。
+              別ブラウザで読み込んで続きから再開できます。
             </p>
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={downloadJSON}>JSONをダウンロード</Button>
               <Button type="button" onClick={copyJSON}>JSONをコピー</Button>
-
               <label className="inline-flex items-center gap-2 border rounded px-3 py-2 cursor-pointer">
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
-                  onChange={handleFile}
-                />
+                <input type="file" accept="application/json" className="hidden" onChange={handleFile} />
                 JSONファイルから読み込み
               </label>
-
               <Button type="button" onClick={resetAll}>全リセット</Button>
             </div>
 
@@ -138,13 +107,10 @@ export default function DataPage() {
               className="w-full min-h-[280px] border rounded p-3 font-mono text-sm"
               value={jsonText}
               onChange={(e) => setJsonText(e.target.value)}
-              spellCheck={false}
             />
 
-            <div className="flex justify-end">
-              <Button type="button" onClick={restoreFromTextarea}>
-                テキストから反映
-              </Button>
+            <div className="flex justify-end gap-2">
+              <Button type="button" onClick={restoreFromTextarea}>テキストから復元</Button>
             </div>
 
             {msg && <p className="text-sm text-green-700">{msg}</p>}
@@ -154,5 +120,3 @@ export default function DataPage() {
     </div>
   );
 }
-
-

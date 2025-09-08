@@ -2,10 +2,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Stepper } from "@/components/stepper";
-import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { useAppStore } from "@/lib/store";
 import type { DocType, EkycPayload } from "@/lib/ekyc";
 import { submitEkyc } from "@/lib/ekyc";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 function usePreviewURL(file: File | null) {
   const [url, setUrl] = useState<string>("");

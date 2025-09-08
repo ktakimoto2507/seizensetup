@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui"; // ← index.ts から解決される
+import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
 const Stepper = dynamic(
   () => import("@/components/stepper").then((m) => ({ default: m.Stepper })),

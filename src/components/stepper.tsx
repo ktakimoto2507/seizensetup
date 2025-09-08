@@ -1,15 +1,24 @@
 "use client";
+
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 
-const labels = ["登録", "本人確認", "資産/配分", "確認"];
-
 export function Stepper() {
+  // 実ストアの値
   const step = useAppStore((s) => s.step);
+
+  // ✅ マウント前は step=0 を固定して描画 → サーバと一致させてミスマッチ回避
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const renderStep = mounted ? step : 0;
+
+  const labels = ["登録", "本人確認", "資産", "確認"];
+
   return (
-    <div className="flex items-center justify-center gap-4 text-sm my-4" suppressHydrationWarning>
+    <div className="flex items-center gap-4">
       {labels.map((label, i) => {
-        const active = i === step;
-        const done = i < step;
+        const active = renderStep === i;
+        const done = renderStep > i;
         return (
           <div key={i} className="flex items-center gap-2">
             <div
@@ -20,8 +29,7 @@ export function Stepper() {
             >
               {i + 1}
             </div>
-            <span className={`${active ? "font-semibold" : "text-gray-600"}`}>{label}</span>
-            {i < labels.length - 1 && <div className="w-8 h-[2px] bg-gray-300" />}
+            <span className={active ? "font-semibold" : "text-gray-600"}>{label}</span>
           </div>
         );
       })}

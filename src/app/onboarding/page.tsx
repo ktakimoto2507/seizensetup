@@ -12,22 +12,29 @@ import { useAppStore } from "@/lib/store";
 import dynamic from "next/dynamic";
 const Stepper = dynamic(() => import("@/components/stepper").then(m => ({ default: m.Stepper })), { ssr: false });
 
-
 const phoneRegex = /^\d{2,4}-\d{3,4}-\d{3,4}$/;
 
 const schema = z.object({
-  name: z.string().min(1, "氏名は必須です"),
-  email: z.string().email("メール形式が正しくありません"),
-  phone: z.string().regex(phoneRegex, "電話番号は 090-1234-5678 形式で入力してください"),
-  dob: z.coerce.date({ required_error: "生年月日を入力してください" })
-    .refine((d) => d <= new Date(), "未来日は選べません")
+  name: z.string().min(1, { message: "氏名は必須です" }),
+  email: z.string().email({ message: "メール形式が正しくありません" }),
+  phone: z.string().regex(phoneRegex, { message: "電話番号は 090-1234-5678 形式で入力してください" }),
+
+  // 文字列で受け取り → 検証 → Date に変換（Zod v3互換）
+  dob: z
+    .string({ required_error: "生年月日を入力してください" })
+    .refine((s) => s.trim().length > 0, { message: "生年月日を入力してください" })
+    .refine((s) => !Number.isNaN(Date.parse(s)), { message: "正しい日付を入力してください" })
+    .transform((s) => new Date(s))
+    .refine((d) => d <= new Date(), { message: "未来日は選べません" })
     .refine((d) => {
-      const t = new Date(); let age = t.getFullYear() - d.getFullYear();
+      const t = new Date();
+      let age = t.getFullYear() - d.getFullYear();
       const m = t.getMonth() - d.getMonth();
       if (m < 0 || (m === 0 && t.getDate() < d.getDate())) age--;
       return age >= 18;
-    }, "18歳以上のみ登録可能です"),
-  password: z.string().min(8, "8文字以上で入力してください"),
+    }, { message: "18歳以上のみ登録可能です" }),
+
+  password: z.string().min(8, { message: "8文字以上で入力してください" }),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -60,7 +67,8 @@ export default function OnboardingPage() {
       name: v.name,
       email: v.email,
       phone: v.phone,
-      dob: new Date(v.dob).toISOString().split("T")[0],
+      // v.dob は Date 型（↑ transform 済み）
+      dob: v.dob.toISOString().split("T")[0],
       password: v.password,
     });
     setStep(1);

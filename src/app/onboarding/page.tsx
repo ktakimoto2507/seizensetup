@@ -18,26 +18,25 @@ const schema = z.object({
   name: z.string().min(1, { message: "氏名は必須です" }),
   email: z.string().email({ message: "メール形式が正しくありません" }),
   phone: z.string().regex(phoneRegex, { message: "電話番号は 090-1234-5678 形式で入力してください" }),
-
-  // 文字列で受け取り → 非空 → 形式確認 → Dateに変換 → 追加バリデーション
+  // ← dob は string のまま検証（transform は使わない）
   dob: z
     .string()
     .min(1, { message: "生年月日を入力してください" })
     .refine((s) => !Number.isNaN(Date.parse(s)), { message: "正しい日付を入力してください" })
-    .transform((s) => new Date(s))
-    .refine((d) => d <= new Date(), { message: "未来日は選べません" })
-    .refine((d) => {
+    .refine((s) => new Date(s) <= new Date(), { message: "未来日は選べません" })
+    .refine((s) => {
+      const d = new Date(s);
       const t = new Date();
       let age = t.getFullYear() - d.getFullYear();
       const m = t.getMonth() - d.getMonth();
       if (m < 0 || (m === 0 && t.getDate() < d.getDate())) age--;
       return age >= 18;
     }, { message: "18歳以上のみ登録可能です" }),
-
   password: z.string().min(8, { message: "8文字以上で入力してください" }),
 });
 type FormValues = z.infer<typeof schema>;
 
+/** 数字だけを取り出して 3-4-4 に整形（簡易） */
 function formatPhone(input: string) {
   const digits = input.replace(/\D/g, "");
   if (digits.length <= 3) return digits;
@@ -56,17 +55,20 @@ export default function OnboardingPage() {
   const minStr = "1900-01-01";
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema), // ← 入力は string なので型不一致は起きない
     mode: "onBlur",
   });
 
   const onSubmit = async (v: FormValues) => {
     setSubmitting(true);
+    // ここで Date に変換して保存用に ISO へ
+    const dobIso = new Date(v.dob).toISOString().split("T")[0];
+
     setProfile({
       name: v.name,
       email: v.email,
       phone: v.phone,
-      dob: v.dob.toISOString().split("T")[0], // transform 済みで Date 型
+      dob: dobIso,
       password: v.password,
     });
     setStep(1);

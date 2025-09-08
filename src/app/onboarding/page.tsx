@@ -19,10 +19,10 @@ const schema = z.object({
   email: z.string().email({ message: "メール形式が正しくありません" }),
   phone: z.string().regex(phoneRegex, { message: "電話番号は 090-1234-5678 形式で入力してください" }),
 
-  // 文字列で受け取り → 検証 → Date に変換（Zod v3互換）
+  // 文字列で受け取り → 非空 → 形式確認 → Dateに変換 → 追加バリデーション
   dob: z
-    .string({ required_error: "生年月日を入力してください" })
-    .refine((s) => s.trim().length > 0, { message: "生年月日を入力してください" })
+    .string()
+    .min(1, { message: "生年月日を入力してください" })
     .refine((s) => !Number.isNaN(Date.parse(s)), { message: "正しい日付を入力してください" })
     .transform((s) => new Date(s))
     .refine((d) => d <= new Date(), { message: "未来日は選べません" })
@@ -38,7 +38,6 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-/** 数字だけを取り出して 3-4-4 に整形（簡易） */
 function formatPhone(input: string) {
   const digits = input.replace(/\D/g, "");
   if (digits.length <= 3) return digits;
@@ -67,8 +66,7 @@ export default function OnboardingPage() {
       name: v.name,
       email: v.email,
       phone: v.phone,
-      // v.dob は Date 型（↑ transform 済み）
-      dob: v.dob.toISOString().split("T")[0],
+      dob: v.dob.toISOString().split("T")[0], // transform 済みで Date 型
       password: v.password,
     });
     setStep(1);
@@ -97,7 +95,7 @@ export default function OnboardingPage() {
               {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email.message}</p>}
             </div>
 
-            {/* 電話番号（register の onChange で自動整形） */}
+            {/* 電話番号 */}
             <div>
               <label htmlFor="phone" className="block mb-1 font-medium">電話番号</label>
               <Input
@@ -105,9 +103,7 @@ export default function OnboardingPage() {
                 inputMode="numeric"
                 placeholder="090-1234-5678"
                 {...register("phone", {
-                  onChange: (e) => {
-                    e.target.value = formatPhone(e.target.value);
-                  },
+                  onChange: (e) => { e.target.value = formatPhone(e.target.value); },
                 })}
               />
               {errors.phone && <p className="text-red-600 text-sm mt-1">{errors.phone.message}</p>}

@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, Card, CardHeader, CardContent } from "@/components/ui";
 import { useAppStore, getPersisted, importPersisted, Persisted } from "@/lib/store";
 import { Stepper } from "@/components/stepper";
 
@@ -155,3 +154,5 @@ export default function DataPage() {
     </div>
   );
 }
+
+

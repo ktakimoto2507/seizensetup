@@ -1,6 +1,7 @@
 "use client";
 
-import { Input, Button } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore, Beneficiary } from "@/lib/store";
 import { lookupZip } from "@/lib/zipcloud";

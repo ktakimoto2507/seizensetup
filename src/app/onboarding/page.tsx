@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { hashPassword } from "@/lib/auth";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -8,8 +9,37 @@ import { useRouter } from "next/navigation";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { useAppStore } from "@/lib/store";
 import dynamic from "next/dynamic";
-const Stepper = dynamic(() => import("@/components/stepper").then(m => ({ default: m.Stepper })), { ssr: false });
 
+// 置き換え版：ハイフン等を除去して 11 桁数字で保存
+export async function finalizeRegistration(phoneInput: string, plainPassword: string) {
+  // 1) 電話番号を数字だけに正規化（ハイフン等を除去）
+  const phone = phoneInput.replace(/\D/g, '').slice(0, 11);
+
+  // 2) 最低限のバリデーション
+  const PHONE_11 = /^\d{11}$/;
+  const PW_RULE  = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+
+  if (!PHONE_11.test(phone)) {
+    throw new Error('電話番号は11桁の数字で入力してください。');
+  }
+  if (!PW_RULE.test(plainPassword)) {
+    throw new Error('パスワードは8文字以上で英数字を含めてください。');
+  }
+
+  // 3) ハッシュ化して保存（localStorage）
+  const passwordHash = await hashPassword(plainPassword);
+  const now = new Date().toISOString();
+
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(
+      'ss_account',
+      JSON.stringify({ phone, passwordHash, createdAt: now, updatedAt: now })
+    );
+    window.localStorage.setItem('ss_onboarded', JSON.stringify(true)); // booleanで保持
+  }
+}
+
+const Stepper = dynamic(() => import("@/components/stepper").then(m => ({ default: m.Stepper })), { ssr: false });
 
 const phoneRegex = /^\d{2,4}-\d{3,4}-\d{3,4}$/;
 
@@ -62,8 +92,11 @@ export default function OnboardingPage() {
       password: v.password,
     });
     setStep(1);
+    await finalizeRegistration(v.phone, v.password);
     await new Promise((r) => setTimeout(r, 300));
     router.push("/kyc");
+
+    setSubmitting(false);
   };
 
   return (

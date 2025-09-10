@@ -1,70 +1,81 @@
-'use client';
-import { useEffect, useRef, useState } from 'react';
-import type { TestResult } from '@/lib/types';
-import { storage } from '@/lib/storage';
+﻿"use client";
+import { useEffect, useRef, useState } from "react";
+import { appendResult } from "@/lib/results";
 
-const SAMPLE =
-  'ReactとNext.jsでタイピング速度と正確性を測定します。ゆっくりでも正確に入力してみましょう。';
+const SAMPLE = "Time flies like an arrow; code flows like a river.";
+
+function calcMetrics(startMs: number, typed: string) {
+  const elapsedMin = Math.max(0.001, (Date.now() - startMs) / 60000);
+  const correct = typed.split("").filter((ch, i) => ch === SAMPLE[i]).length;
+  const accuracy = typed.length === 0 ? 0 : Math.round((correct / typed.length) * 100);
+  const wpm = Math.round((typed.length / 5) / elapsedMin);
+  return { wpm, accuracy };
+}
 
 export default function Deus00Page() {
-  const startedAt = useRef<Date | null>(null);
-  const [target] = useState(SAMPLE);
-  const [input, setInput] = useState('');
+  const [typed, setTyped] = useState("");
+  const [wpm, setWpm] = useState(0);
+  const [accuracy, setAccuracy] = useState(0);
   const [done, setDone] = useState(false);
-  const [metrics, setMetrics] = useState<{ wpm: number; accuracy: number } | null>(null);
+  const startedAtIso = useRef<string | null>(null);
+  const startMsRef = useRef<number | null>(null);
+  const savedRef = useRef(false); // 二重保存防止
+
+  function ensureStart() {
+    if (startMsRef.current == null) {
+      startMsRef.current = Date.now();
+      startedAtIso.current = new Date().toISOString();
+    }
+  }
 
   useEffect(() => {
-    if (input.length === 1 && !startedAt.current) startedAt.current = new Date();
-
-    if (!done && input === target) {
-      setDone(true);
-      const finished = new Date();
-      const start = startedAt.current ?? finished;
-      const ms = finished.getTime() - start.getTime();
-      const minutes = Math.max(ms / 60000, 1 / 60);
-      const words = target.length / 5;
-      const wpm = Math.round(words / minutes);
-
-      let correct = 0;
-      for (let i = 0; i < target.length; i++) if (target[i] === input[i]) correct++;
-      const acc = Math.round((correct / target.length) * 100);
-
-      setMetrics({ wpm, accuracy: acc });
-
-      const result: TestResult = {
-        id: 'deus00',
-        startedAt: start.toISOString(),
-        finishedAt: finished.toISOString(),
-        score: Math.round((wpm / 80) * 60 + (acc / 100) * 40),
-        detail: { wpm, accuracy: acc, length: target.length },
-      };
-      const history = storage.loadJSON<TestResult[]>('ss_results') || [];
-      history.push(result);
-      storage.saveJSON('ss_results', history);
+    if (startMsRef.current != null) {
+      const m = calcMetrics(startMsRef.current, typed);
+      setWpm(m.wpm);
+      setAccuracy(m.accuracy);
+      if (typed.length >= SAMPLE.length) setDone(true);
     }
-  }, [input, target, done]);
+  }, [typed]);
+
+  useEffect(() => {
+    if (done && startMsRef.current != null && !savedRef.current) {
+      savedRef.current = true;
+      appendResult({
+        id: "deus00",
+        startedAt: startedAtIso.current ?? new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        score: accuracy, // スコアは正確性%
+        detail: { wpm, accuracy, targetLength: SAMPLE.length },
+      });
+    }
+  }, [done, wpm, accuracy]);
 
   return (
-    <main className="rounded-2xl bg-white p-6 shadow grid gap-4">
-      <h1 className="text-xl font-bold">deus00：タイピング</h1>
-      <p className="text-sm text-gray-600">以下の文章を正確に入力してください。</p>
-      <div className="rounded bg-gray-100 p-4 leading-7">{target}</div>
+    <main className="grid gap-4 rounded-2xl bg-white p-6 shadow">
+      <h1 className="text-xl font-bold">deus00：タイピング計測</h1>
+      <p className="text-sm text-gray-600">下の文を正確にタイプしてください。終わると自動で結果を保存します。</p>
+
+      <div className="rounded bg-gray-100 p-4 leading-7 font-mono">{SAMPLE}</div>
+
       <textarea
-        className="min-h-32 w-full rounded border p-3"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="ここに入力"
+        className="min-h-32 w-full rounded border p-3 font-mono"
+        placeholder="ここにタイプ…"
+        value={typed}
+        onChange={(e) => {
+          ensureStart();
+          setTyped(e.target.value);
+        }}
       />
-      {metrics && (
-        <div className="rounded border p-4">
-          <p>WPM（概算）: <b>{metrics.wpm}</b></p>
-          <p>正確性: <b>{metrics.accuracy}%</b></p>
-          <div className="mt-2 flex gap-3">
-            <a className="btn-ghost" href="/home">ホームへ戻る</a>
-            <button className="btn-primary" onClick={() => location.reload()}>もう一度</button>
-          </div>
-        </div>
-      )}
+
+      <div className="flex gap-4 text-sm">
+        <div>WPM：<b>{wpm}</b></div>
+        <div>正確性：<b>{accuracy}%</b></div>
+        {done && <div className="text-green-700">完了！結果を保存しました。</div>}
+      </div>
+
+      <div>
+        <a className="rounded-xl border px-4 py-2 hover:bg-gray-50" href="/home">HOMEへ戻る</a>
+      </div>
     </main>
   );
 }

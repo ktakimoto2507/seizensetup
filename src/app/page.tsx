@@ -1,41 +1,62 @@
-"use client";
+﻿"use client";
 
-import Link from "next/link";
-import { Button } from "@/components/ui";
-import dynamic from "next/dynamic";
-const Stepper = dynamic(() => import("@/components/stepper").then(m => ({ default: m.Stepper })), { ssr: false });
-import { useAppStore } from "@/lib/store";
+import { useEffect, useState } from "react";
 
-export default function Home() {
-  const step = useAppStore((s) => s.step);
+type Session = { phone: string; loggedInAt: string } | null;
 
-  // 続きから再開ボタン（現在のステップに応じたページへ）
-  const resumePath = step === 0 ? "/onboarding" : step === 1 ? "/kyc" : step === 2 ? "/assets" : "/review";
+const Card = ({ href, title, desc }: { href: string; title: string; desc: string }) => (
+  <a href={href} className="rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow">
+    <h3 className="text-lg font-semibold">{title}</h3>
+    <p className="mt-1 text-sm text-gray-600">{desc}</p>
+  </a>
+);
+
+export default function EntryPage() {
+  const [session, setSession] = useState<Session>(null);
+  const [onboarded, setOnboarded] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("ss_session");
+      setSession(raw ? (JSON.parse(raw) as Session) : null);
+    } catch { setSession(null); }
+
+    try {
+      const raw = window.localStorage.getItem("ss_onboarded");
+      let ob = false;
+      if (raw === "1") ob = true;
+      else if (raw) {
+        const parsed = JSON.parse(raw);
+        ob = parsed === true || parsed === "1";
+      }
+      setOnboarded(ob);
+    } catch { setOnboarded(false); }
+  }, []);
 
   return (
-    <div className="min-h-screen grid place-items-center p-6">
-      <div className="text-center space-y-4 max-w-md">
-        <Stepper />
-        <h1 className="text-2xl font-bold">ホーム</h1>
-        <p>現在のステップ：{step + 1} / 4</p>
+    <main className="grid gap-6">
+      <section className="rounded-2xl bg-white p-6 shadow">
+        <h1 className="text-2xl font-bold">入口</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          初回登録（seizensetup）またはログインから開始してください。
+        </p>
+        {session ? (
+          <p className="mt-2 text-sm">
+            現在ログイン中：<b>{session.phone}</b> ／{" "}
+            <a className="text-blue-600 underline" href="/home">ホームへ移動</a>
+          </p>
+        ) : onboarded ? (
+          <p className="mt-2 text-sm">
+            初回登録は完了しています。<a className="text-blue-600 underline" href="/auth/login">ログイン</a>してください。
+          </p>
+        ) : null}
+      </section>
 
-        <div className="flex flex-wrap gap-2 justify-center">
-          <Button asChild><Link href="/onboarding">はじめる</Link></Button>
-
-          {/* 続きから */}
-          <Button asChild><Link href={resumePath}>続きから</Link></Button>
-
-          {/* 途中確認：step<3 の間は無効化して押せないように */}
-          {step < 3 ? (
-            <Button disabled title="送信（ダミー）まで完了すると有効になります">途中確認</Button>
-          ) : (
-            <Button asChild><Link href="/review">途中確認</Link></Button>
-          )}
-
-          {/* データ管理ページ（任意） */}
-          <Button asChild><Link href="/data">データ管理</Link></Button>
-        </div>
-      </div>
-    </div>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card href="/onboarding" title="初回登録はこちら" desc="電話番号をIDとして登録。パスワードも設定します。" />
+        <Card href="/auth/login" title="登録済の方はこちら（ログイン）" desc="電話番号（ID）とパスワードでログインします。" />
+      </section>
+    </main>
   );
 }

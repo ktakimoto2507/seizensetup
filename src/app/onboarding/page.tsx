@@ -11,7 +11,7 @@ import { useAppStore } from "@/lib/store";
 import dynamic from "next/dynamic";
 
 // 置き換え版：ハイフン等を除去して 11 桁数字で保存
-export async function finalizeRegistration(phoneInput: string, plainPassword: string) {
+async function finalizeRegistration(phoneInput: string, plainPassword: string) {
   // 1) 電話番号を数字だけに正規化（ハイフン等を除去）
   const phone = phoneInput.replace(/\D/g, '').slice(0, 11);
 

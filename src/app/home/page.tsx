@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { hashPassword } from "@/lib/auth";
 
 // ========== Types ==========
 type Session = { phone: string; loggedInAt: string };
@@ -11,7 +10,6 @@ type Profile = {
   birthday?: string; // YYYY-MM-DD
   email?: string;
   address?: string;
-  // note?: string; // ← UIからは削除
 };
 type Account = { phone: string; passwordHash: string; createdAt?: string; updatedAt?: string };
 type TestResult = {
@@ -24,8 +22,6 @@ type TestResult = {
 
 // ========== Helpers ==========
 const PHONE_11 = /^\d{11}$/;
-const PW_RULE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
-const NO_CHANGE_MASK = "********"; // ← これが入っていたら「パスワード変更なし」
 
 function loadJSON<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
@@ -44,6 +40,59 @@ function removeKey(key: string) {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(key);
 }
+const labelOf = (id: TestResult["id"]) =>
+  ({ ex00: "記憶力診断", deus00: "タイピング測定", machina00: "座標当てゲーム" }[id] ?? id);
+
+// --- 住所抽出（ss_profile / ss_assets どちらでもOK、分割なら連結） ---
+function pickAddressFromProfile(): string {
+  const p = loadJSON<Record<string, any>>("ss_profile");
+  if (!p) return "";
+  // 1本の文字列なら優先
+  if (typeof p.address === "string" && p.address.trim()) return p.address.trim();
+
+  // 分割保存のゆるい吸収
+  const get = (obj: any, names: string[]) =>
+    names.map((k) => obj?.[k]).find(Boolean) as string | undefined;
+
+  const parts = [
+    get(p, ["prefecture", "都道府県"]),
+    get(p, ["city", "ward", "区", "市"]),
+    get(p, ["town", "丁目", "町", "大字", "字"]),
+    get(p, ["street", "address1", "line1", "番地"]),
+    get(p, ["building", "address2", "line2"]),
+  ].filter(Boolean);
+
+  return parts.join(" ");
+}
+
+function pickAddressFromAssets(): string {
+  const a = loadJSON<Record<string, any>>("ss_assets") || loadJSON<Record<string, any>>("ss_asset");
+  if (!a) return "";
+  const addr = (typeof a.address === "object" && a.address) ? a.address : a;
+
+  const get = (obj: any, names: string[]) =>
+    names.map((k) => obj?.[k]).find(Boolean) as string | undefined;
+
+  const parts = [
+    get(addr, ["prefecture", "都道府県"]),
+    get(addr, ["city", "ward", "区", "市"]),
+    get(addr, ["town", "丁目", "町", "大字", "字"]),
+    get(addr, ["street", "address1", "line1", "番地"]),
+    get(addr, ["building", "address2", "line2"]),
+  ].filter(Boolean);
+
+  const zip = get(addr, ["postalCode", "zip", "zipcode", "郵便", "郵便番号"]);
+  const joined = parts.join(" ");
+  return zip ? `〒${String(zip)} ${joined}` : joined;
+}
+
+/** 住所の最終決定（profile優先 → なければassets）。常に string を返す */
+function resolveAddress(): string {
+  const fromProfile = pickAddressFromProfile();
+  if (fromProfile && fromProfile.trim()) return fromProfile.trim();
+  const fromAssets = pickAddressFromAssets();
+  return fromAssets ? fromAssets : "";
+}
 
 // ========== Component ==========
 export default function HomeDashboard() {
@@ -59,9 +108,8 @@ export default function HomeDashboard() {
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
 
-  // アカウント編集値（電話・新パスワード）
+  // アカウント（電話のみ編集可）
   const [phoneEdit, setPhoneEdit] = useState("");
-  const [pwEdit, setPwEdit] = useState(NO_CHANGE_MASK); // 既定は「変更なし」
 
   // 編集モード
   const [editMode, setEditMode] = useState(false);
@@ -88,23 +136,29 @@ export default function HomeDashboard() {
     const s = loadJSON<Session>("ss_session");
     if (s?.phone) setSessionPhone(s.phone);
 
-    // プロフィール（旧構造の連結にも対応）
-    const p = loadJSON<Profile & Record<string, string | undefined>>("ss_profile");
-    if (p) {
-      setFullName(p.fullName ?? "");
-      setBirthday(p.birthday ?? "");
-      setEmail(p.email ?? "");
-      // address がなければ、旧データの分割項目を連結してみる
-      const joined =
-        p.address ??
-        [p.prefecture, p.city, p.town, p.street, p.building].filter(Boolean).join("") ;
-      setAddress(joined);
-      snapshotRef.current = { fullName: p.fullName, birthday: p.birthday, email: p.email, address: joined };
-    } else {
-      snapshotRef.current = { fullName: "", birthday: "", email: "", address: "" };
+    // プロフィール読み込み（住所は自動連結。無ければ Assets から補完）
+    const p = loadJSON<Profile & Record<string, any>>("ss_profile") || ({} as any);
+
+    const resolvedAddress = resolveAddress();
+
+    setFullName(p.fullName ?? "");
+    setBirthday(p.birthday ?? "");
+    setEmail(p.email ?? "");
+    setAddress(resolvedAddress);
+
+    snapshotRef.current = {
+      fullName: p.fullName ?? "",
+      birthday: p.birthday ?? "",
+      email: p.email ?? "",
+      address: resolvedAddress,
+    };
+
+    // プロフィールに address が未保存なら補完して保存（次回以降も確実に表示）
+    if (!p.address && resolvedAddress) {
+      saveJSON("ss_profile", { ...p, address: resolvedAddress });
     }
 
-    // アカウント（電話は初期表示、パスワードはセキュリティ上 “********”）
+    // アカウント（電話は初期表示）
     const a = loadJSON<Account>("ss_account");
     if (a?.phone) setPhoneEdit(a.phone);
     else if (s?.phone) setPhoneEdit(s.phone);
@@ -117,7 +171,6 @@ export default function HomeDashboard() {
 
   function enterEdit() {
     snapshotRef.current = { fullName, birthday, email, address };
-    setPwEdit(NO_CHANGE_MASK); // 編集開始時にマスクを入れておく
     setEditMode(true);
   }
   function cancelEdit() {
@@ -128,10 +181,8 @@ export default function HomeDashboard() {
       setEmail(snap.email ?? "");
       setAddress(snap.address ?? "");
     }
-    // アカウントは保存済みの値に戻す
     const a = loadJSON<Account>("ss_account");
     setPhoneEdit(a?.phone ?? sessionPhone ?? "");
-    setPwEdit(NO_CHANGE_MASK);
     setErr(null);
     setMsg(null);
     setEditMode(false);
@@ -152,25 +203,16 @@ export default function HomeDashboard() {
       setErr("電話番号は11桁で入力してください。");
       return;
     }
-    if (pwEdit !== NO_CHANGE_MASK && pwEdit && !PW_RULE.test(pwEdit)) {
-      setErr("パスワードは8文字以上で英数字を含めてください。");
-      return;
-    }
 
     // プロフィール保存
     const profile: Profile = { fullName, birthday, email, address };
     saveJSON("ss_profile", profile);
 
-    // アカウント保存（電話変更・パスワード変更に対応）
+    // アカウント保存（電話のみ）
     const accOld = loadJSON<Account>("ss_account");
-    let nextAcc: Account = accOld
-      ? { ...accOld, phone: phoneDigits }
-      : { phone: phoneDigits, passwordHash: "", createdAt: new Date().toISOString() };
-
-    if (pwEdit !== NO_CHANGE_MASK && pwEdit) {
-      nextAcc.passwordHash = await hashPassword(pwEdit);
-    }
-    nextAcc.updatedAt = new Date().toISOString();
+    const nextAcc: Account = accOld
+      ? { ...accOld, phone: phoneDigits, updatedAt: new Date().toISOString() }
+      : { phone: phoneDigits, passwordHash: "", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     saveJSON("ss_account", nextAcc);
 
     // セッションの電話も同期
@@ -181,7 +223,6 @@ export default function HomeDashboard() {
       setSessionPhone(sNext.phone);
     }
 
-    setPwEdit(NO_CHANGE_MASK);
     setEditMode(false);
     setMsg("保存しました。");
     setTimeout(() => setMsg(null), 1500);
@@ -189,7 +230,7 @@ export default function HomeDashboard() {
 
   function handleLogout() {
     removeKey("ss_session");
-    router.push("/");
+    location.href = "/";
   }
 
   if (!hydrated) {
@@ -236,7 +277,7 @@ export default function HomeDashboard() {
           <div className="rounded-2xl bg-white p-6 shadow">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">プロフィールの確認・編集</h2>
-              {/* 右上の「編集する」ボタンは削除（下にだけ表示） */}
+              {/* 右上の「編集する」ボタンは削除 */}
             </div>
 
             {msg && <p className="mb-3 text-sm text-emerald-700">{msg}</p>}
@@ -282,13 +323,16 @@ export default function HomeDashboard() {
                   className="w-full rounded border px-3 py-2"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="東京都〇〇区…"
+                  placeholder="東京都千代田区…"
                   disabled={!editMode}
                 />
               </div>
 
               <div className="md:col-span-2 border-t pt-4 mt-2">
-                <h3 className="text-sm font-medium mb-2">アカウント（電話・パスワード）</h3>
+                <h3 className="text-sm font-medium mb-2">アカウント（電話）</h3>
+                <a className="text-sm text-emerald-700 underline mt-1 inline-block" href="/account/password">
+                  パスワードを変更する
+                </a>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-gray-600 mb-1">電話番号（11桁）</label>
@@ -301,20 +345,6 @@ export default function HomeDashboard() {
                       placeholder="090xxxxxxxx"
                       disabled={!editMode}
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">パスワード（変更時のみ）</label>
-                    <input
-                      className="w-full rounded border px-3 py-2"
-                      type="password"
-                      value={pwEdit}
-                      onChange={(e) => setPwEdit(e.target.value || NO_CHANGE_MASK)}
-                      placeholder={NO_CHANGE_MASK}
-                      disabled={!editMode}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      ※ 「{NO_CHANGE_MASK}」のまま保存するとパスワードは変更されません。
-                    </p>
                   </div>
                 </div>
               </div>
@@ -337,19 +367,34 @@ export default function HomeDashboard() {
                     編集する
                   </button>
                 )}
+                {editMode && (
+                  <button
+                    className="rounded-xl border px-4 py-2 hover:bg-gray-50"
+                    type="button"
+                    onClick={cancelEdit}
+                  >
+                    キャンセル
+                  </button>
+                )}
               </div>
             </form>
           </div>
         </div>
 
-        {/* 右：アプリ & 最近の結果（注意書きとクイックリンクは削除） */}
+        {/* 右：アプリ & 最近の結果 */}
         <div className="space-y-6">
           <div className="rounded-2xl bg-white p-6 shadow">
             <h2 className="text-lg font-semibold mb-3">アプリ</h2>
             <div className="grid grid-cols-1 gap-3">
-              <a href="/apps/ex00" className="rounded-xl border px-4 py-3 text-center hover:bg-gray-50">ex00：記憶チェック</a>
-              <a href="/apps/deus00" className="rounded-xl border px-4 py-3 text-center hover:bg-gray-50">deus00：タイピング</a>
-              <a href="/apps/machina00" className="rounded-xl border px-4 py-3 text-center hover:bg-gray-50">machina00：座標あて</a>
+              <a href="/apps/ex00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50">
+                記憶力診断
+              </a>
+              <a href="/apps/deus00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50">
+                タイピング測定（百人一首）
+              </a>
+              <a href="/apps/machina00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50">
+                座標当てゲーム
+              </a>
             </div>
           </div>
 
@@ -359,7 +404,9 @@ export default function HomeDashboard() {
               <div className="space-y-2">
                 {recent.map((r, i) => (
                   <div key={i} className="text-sm py-1 border-b last:border-0">
-                    <div><b>{r.id}</b>：{r.score} 点</div>
+                    <div>
+                      <b>{labelOf(r.id)}</b>：{r.score} 点
+                    </div>
                     <div className="text-gray-500">{new Date(r.finishedAt).toLocaleString()}</div>
                   </div>
                 ))}

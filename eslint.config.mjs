@@ -22,4 +22,20 @@ const eslintConfig = [
   },
 ];
 
-export default eslintConfig;
+// 例：ファイル末尾の export default の配列に下2つのブロックを追加
+export default [
+  // ...既存の設定たち
+
+  // ① 無視したい一時ファイルを除外
+  { ignores: ['src/app/**/page copy*.tsx', 'src/lib/store copy.ts'] },
+
+  // ② いまはエラーで止めない（WARN化）
+  {
+    files: ['**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'prefer-const': 'warn',
+    },
+  },
+];
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore, Beneficiary } from "@/lib/store";
@@ -59,7 +59,7 @@ function removeBeneficiary(items: Beneficiary[], id: string): Beneficiary[] {
   const left = items.filter((b) => b.id !== id);
   if (left.length === 0) return items; // 最低1名は残す
   const sum = left.reduce((s, b) => s + b.percent, 0) || 1;
-  let res = left.map((b) => ({ ...b, percent: Math.round((b.percent / sum) * 100) }));
+  const res = left.map((b) => ({ ...b, percent: Math.round((b.percent / sum) * 100) }));
   const diff = 100 - res.reduce((s, b) => s + b.percent, 0);
   if (res.length > 0) res[0].percent += diff;
   return res;

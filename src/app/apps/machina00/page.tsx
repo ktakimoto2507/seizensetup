@@ -165,11 +165,11 @@ export default function MachinaGrid() {
     finishedAtRef.current = new Date().toISOString();
 
     appendResult({
-      id: "machina00",
+      app: "machina00",
       startedAt: startedAtRef.current,
       finishedAt: finishedAtRef.current,
       score: accuracy,
-      detail: {
+      meta: {
         difficulty,
         rows,
         cols,

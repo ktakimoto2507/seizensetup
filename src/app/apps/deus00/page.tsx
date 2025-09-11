@@ -73,11 +73,18 @@ export default function TypingPoem() {
     const score = Math.round((acc * 0.75) + Math.min(wpm, 300) * 0.083);
 
     appendResult({
-      id: "deus00",
+      app: "deus00",
       startedAt: startedAt.current,
       finishedAt: new Date().toISOString(),
       score,
-      detail: { poet: poem.poet, text: poem.text, input, wpm, accuracy: acc },
+      meta: { 
+        poet: poem.poet,
+        text: poem.text,
+        input,
+        wpm,
+        accuracy: acc,
+      },
+      // detail: { poet: poem.poet, text: poem.text, input, wpm, accuracy: acc },
     });
   }
 

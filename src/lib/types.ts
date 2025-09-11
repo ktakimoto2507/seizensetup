@@ -13,7 +13,8 @@ export type StepLog = {
 
 /** 成績の保存フォーマット（必要に応じて拡張可） */
 export type TestResult = {
-  app: "ex00" | "machina00" | "deus00" | string;
+  app?: "ex00" | "machina00" | "deus00" | string;
+  id?: string; // ← 互換用（将来は削除推奨）
   difficulty?: Difficulty | string;
   score?: number;
   rounds?: number;

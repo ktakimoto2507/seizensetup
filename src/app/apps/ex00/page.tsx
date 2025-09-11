@@ -125,11 +125,11 @@ export default function MemoryChoice() {
 
       finishedAt.current = new Date().toISOString();
       appendResult({
-        id: "ex00",
+        app: "ex00",
         startedAt: startedAt.current,
         finishedAt: finishedAt.current,
         score: s,
-        detail: { memorySet, answers: detail },
+        meta: { memorySet, answers: detail },
       });
 
       setPhase("result");

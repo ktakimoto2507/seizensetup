@@ -17,7 +17,7 @@ type TestResult = {
   startedAt: string;
   finishedAt: string;
   score: number;
-  detail?: Record<string, any>;
+  meta: Record<string, any>;
 };
 
 // ========== Helpers ==========
@@ -43,6 +43,36 @@ function removeKey(key: string) {
 const labelOf = (id: TestResult["id"]) =>
   ({ ex00: "記憶力診断", deus00: "タイピング測定", machina00: "座標当てゲーム" }[id] ?? id);
 
+// === スコアの“何の点数か”表示用マップ ===
+const APP_INFO: Record<
+  TestResult["id"],
+  { name: string; scoreWhat: string; unit?: string }
+> = {
+  ex00:     { name: "記憶力診断",           scoreWhat: "スコア",  unit: "点" },
+  deus00:   { name: "タイピング測定（百人一首）", scoreWhat: "スコア",  unit: "点" }, // 必要なら WPM 等に変更可
+  machina00:{ name: "座標当て",             scoreWhat: "正答率", unit: "点" },
+};
+
+// 難易度を日本語表示に（machina00 用）
+const DIFF_JA: Record<string, string> = { easy: "初級", normal: "中級", hard: "上級" };
+
+// ex00/deus00 は id で保存されていますが、machina00 は app で保存している場合にも対応
+function normalizeResultId(r: any): TestResult["id"] {
+  return (r?.id ?? r?.app) as TestResult["id"];
+}
+
+// 1行の表示テキストを作る
+function renderScoreLine(r: any) {
+  const id = normalizeResultId(r);
+  const info = APP_INFO[id] ?? { name: id, scoreWhat: "スコア", unit: "点" };
+  const diff =
+    id === "machina00" && r?.meta?.difficulty
+      ? `（${DIFF_JA[String(r.meta.difficulty)] ?? r.meta.difficulty}）`
+      : "";
+  const unit = info.unit ? ` ${info.unit}` : "";
+  return `${info.name}${diff}／${info.scoreWhat}：${r.score}${unit}`;
+}
+
 // --- 住所抽出（ss_profile / ss_assets どちらでもOK、分割なら連結） ---
 function pickAddressFromProfile(): string {
   const p = loadJSON<Record<string, any>>("ss_profile");
@@ -65,33 +95,42 @@ function pickAddressFromProfile(): string {
   return parts.join(" ");
 }
 
+// src/app/home/page.tsx
+
+// --- 置き換え前の pickAddressFromAssets を丸ごと差し替え ---
 function pickAddressFromAssets(): string {
-  const a = loadJSON<Record<string, any>>("ss_assets") || loadJSON<Record<string, any>>("ss_asset");
-  if (!a) return "";
-  const addr = (typeof a.address === "object" && a.address) ? a.address : a;
+  if (typeof window === "undefined") return "";
 
-  const get = (obj: any, names: string[]) =>
-    names.map((k) => obj?.[k]).find(Boolean) as string | undefined;
+  try {
+    const raw = window.localStorage.getItem("seizensetup_store_v1");
+    if (!raw) return "";
 
-  const parts = [
-    get(addr, ["prefecture", "都道府県"]),
-    get(addr, ["city", "ward", "区", "市"]),
-    get(addr, ["town", "丁目", "町", "大字", "字"]),
-    get(addr, ["street", "address1", "line1", "番地"]),
-    get(addr, ["building", "address2", "line2"]),
-  ].filter(Boolean);
+    const obj = JSON.parse(raw);
+    const a = obj?.address;
+    if (!a) return "";
 
-  const zip = get(addr, ["postalCode", "zip", "zipcode", "郵便", "郵便番号"]);
-  const joined = parts.join(" ");
-  return zip ? `〒${String(zip)} ${joined}` : joined;
+    // 安全に文字列化
+    const zip   = (a.postalCode ?? "").toString().trim().replace(/^〒?/, "");
+    const pref  = (a.prefecture ?? "").toString().trim();
+    const city  = (a.city ?? "").toString().trim();
+    const town  = (a.town ?? "").toString().trim();
+    const line1 = (a.line1 ?? "").toString().trim();
+    const line2 = (a.line2 ?? "").toString().trim();
+
+    const parts = [pref, city, town, line1, line2].filter(Boolean).join(" ");
+    return zip ? `〒${zip}${parts ? " " + parts : ""}` : parts;
+  } catch {
+    return "";
+  }
 }
 
-/** 住所の最終決定（profile優先 → なければassets）。常に string を返す */
+// 住所の最終決定：Assets 優先 → なければ ss_profile をそのまま使う
 function resolveAddress(): string {
-  const fromProfile = pickAddressFromProfile();
-  if (fromProfile && fromProfile.trim()) return fromProfile.trim();
   const fromAssets = pickAddressFromAssets();
-  return fromAssets ? fromAssets : "";
+  if (fromAssets) return fromAssets;
+
+  const p = loadJSON<{ address?: string }>("ss_profile");
+  return (p?.address ?? "").trim();
 }
 
 // ========== Component ==========
@@ -140,6 +179,7 @@ export default function HomeDashboard() {
     const p = loadJSON<Profile & Record<string, any>>("ss_profile") || ({} as any);
 
     const resolvedAddress = resolveAddress();
+    console.log("DEBUG HOME resolvedAddress =", resolvedAddress); // ← これを追加
 
     setFullName(p.fullName ?? "");
     setBirthday(p.birthday ?? "");
@@ -320,11 +360,12 @@ export default function HomeDashboard() {
               <div>
                 <label className="block text-sm text-gray-600 mb-1">住所</label>
                 <input
-                  className="w-full rounded border px-3 py-2"
+                  className={`w-full rounded border px-3 py-2 ${!editMode ? "bg-gray-50" : ""}`}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="東京都千代田区…"
-                  disabled={!editMode}
+                  readOnly={!editMode}
+                  aria-readonly={!editMode}
                 />
               </div>
 
@@ -400,20 +441,21 @@ export default function HomeDashboard() {
 
           <div className="rounded-2xl bg-white p-6 shadow">
             <h2 className="text-lg font-semibold mb-3">最近の結果（最新5件）</h2>
-            {recent.length ? (
-              <div className="space-y-2">
-                {recent.map((r, i) => (
-                  <div key={i} className="text-sm py-1 border-b last:border-0">
-                    <div>
-                      <b>{labelOf(r.id)}</b>：{r.score} 点
-                    </div>
-                    <div className="text-gray-500">{new Date(r.finishedAt).toLocaleString()}</div>
+          {recent.length ? (
+            <div className="space-y-2">
+              {recent.map((r: any, i: number) => (
+                <div key={i} className="text-sm py-2 border-b last:border-0">
+                  ：{renderScoreLine(r)}
+                  <div className="text-xs text-gray-500">
+                    {r?.finishedAt ? new Date(r.finishedAt).toLocaleString() : ""}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-600">まだ結果はありません。</p>
-            )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600">まだ結果はありません。</p>
+          )}
+  
           </div>
         </div>
       </div>

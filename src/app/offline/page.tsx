@@ -1,4 +1,5 @@
-export const dynamic = "force-static"; // ビルド時に静的出力
+// src/app/offline/page.tsx
+export const dynamic = "force-static"; // ensure static output at build time
 
 export default function OfflinePage() {
   return (

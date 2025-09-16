@@ -1,8 +1,19 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  eslint: { ignoreDuringBuilds: true }, // ← これで Vercel の build 中に ESLint を無視
-  // typescript は落とさないほうが安全
-  typescript: { ignoreBuildErrors: false },
+// next.config.ts
+import type { NextConfig } from "next";
+import nextPWA from "next-pwa";
+
+const withPWA = nextPWA({
+  dest: "public",            // SWとキャッシュ出力先
+  register: true,            // 自動登録
+  skipWaiting: true,         // 即時有効化
+  disable: process.env.NODE_ENV === "development", // 開発時は無効に
+  fallbacks: { document: "/offline" },             // オフライン時の代替ページ
+});
+
+const nextConfig: NextConfig = {
+  eslint: { ignoreDuringBuilds: true },   // ← 既存を維持
+  typescript: { ignoreBuildErrors: false } // ← 既存を維持
+  // 必要なら他のNext設定をここに追加
 };
-export default nextConfig; // mjs/ts の場合
-// module.exports = nextConfig; // js の場合はこちら
+
+export default withPWA(nextConfig);

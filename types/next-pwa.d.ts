@@ -1,5 +1,6 @@
-﻿declare module 'next-pwa' {
-  import type { NextConfig } from 'next';
+// types/next-pwa.d.ts
+declare module "next-pwa" {
+  import type { NextConfig } from "next";
   type PWAOptions = {
     dest?: string;
     register?: boolean;

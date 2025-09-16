@@ -1,4 +1,5 @@
-﻿import sharp from "sharp";
+// scripts/make-icons.mjs
+import sharp from "sharp";
 import { mkdirSync } from "fs";
 
 mkdirSync("public/icons", { recursive: true });

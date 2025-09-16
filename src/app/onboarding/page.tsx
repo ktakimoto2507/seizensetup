@@ -1,5 +1,6 @@
-"use client";
+﻿"use client";
 
+import { hashPassword } from "@/lib/auth";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -8,26 +9,67 @@ import { useRouter } from "next/navigation";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { useAppStore } from "@/lib/store";
 import dynamic from "next/dynamic";
-const Stepper = dynamic(() => import("@/components/stepper").then(m => ({ default: m.Stepper })), { ssr: false });
 
+// 置き換え版：ハイフン等を除去して 11 桁数字で保存
+async function finalizeRegistration(phoneInput: string, plainPassword: string) {
+  // 1) 電話番号を数字だけに正規化（ハイフン等を除去）
+  const phone = phoneInput.replace(/\D/g, '').slice(0, 11);
+
+  // 2) 最低限のバリデーション
+  const PHONE_11 = /^\d{11}$/;
+  const PW_RULE  = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+
+  if (!PHONE_11.test(phone)) {
+    throw new Error('電話番号は11桁の数字で入力してください。');
+  }
+  if (!PW_RULE.test(plainPassword)) {
+    throw new Error('パスワードは8文字以上で英数字を含めてください。');
+  }
+
+  // 3) ハッシュ化して保存（localStorage）
+  const passwordHash = await hashPassword(plainPassword);
+  const now = new Date().toISOString();
+
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(
+      'ss_account',
+      JSON.stringify({ phone, passwordHash, createdAt: now, updatedAt: now })
+    );
+    window.localStorage.setItem('ss_onboarded', JSON.stringify(true)); // booleanで保持
+  }
+}
+
+const Stepper = dynamic(() => import("@/components/stepper").then(m => ({ default: m.Stepper })), { ssr: false });
 
 const phoneRegex = /^\d{2,4}-\d{3,4}-\d{3,4}$/;
 
+// ここに置き換え
 const schema = z.object({
   name: z.string().min(1, "氏名は必須です"),
   email: z.string().email("メール形式が正しくありません"),
-  phone: z.string().regex(phoneRegex, "電話番号は 090-1234-5678 形式で入力してください"),
-  dob: z.coerce.date({ required_error: "生年月日を入力してください" })
-    .refine((d) => d <= new Date(), "未来日は選べません")
-    .refine((d) => {
-      const t = new Date(); let age = t.getFullYear() - d.getFullYear();
+  phone: z.string().regex(
+    phoneRegex,
+    "電話番号は 090-1234-5678 形式で入力してください"
+  ),
+  // フォームの入力は string（YYYY-MM-DD）。Zod で妥当性チェックのみ行う
+  dob: z
+    .string()
+    .min(1, "生年月日を入力してください")
+    .refine((s) => !Number.isNaN(Date.parse(s)), { message: "生年月日を入力してください" })
+    .refine((s) => new Date(s) <= new Date(), { message: "未来日は選べません" })
+    .refine((s) => {
+      const d = new Date(s);
+      const t = new Date();
+      let age = t.getFullYear() - d.getFullYear();
       const m = t.getMonth() - d.getMonth();
       if (m < 0 || (m === 0 && t.getDate() < d.getDate())) age--;
       return age >= 18;
-    }, "18歳以上のみ登録可能です"),
+    }, { message: "18歳以上のみ登録可能です" }),
   password: z.string().min(8, "8文字以上で入力してください"),
 });
-type FormValues = z.infer<typeof schema>;
+
+// ★ フォーム値の型は「入力型」を使う（= dob は string）
+type FormValues = z.input<typeof schema>;
 
 /** 数字だけを取り出して 3-4-4 に整形（簡易） */
 function formatPhone(input: string) {
@@ -62,8 +104,24 @@ export default function OnboardingPage() {
       password: v.password,
     });
     setStep(1);
+    await finalizeRegistration(v.phone, v.password);
+
+    // 初期プロフィールも localStorage に保存（HOME 初回表示用）
+      if (typeof window !== "undefined") {
+        const profile = {
+          fullName: v.name,
+          email: v.email,
+          birthday: new Date(v.dob).toISOString().split("T")[0],
+          address: "",
+          note: "",
+        };
+        window.localStorage.setItem("ss_profile", JSON.stringify(profile));
+      }
+
     await new Promise((r) => setTimeout(r, 300));
     router.push("/kyc");
+
+    setSubmitting(false);
   };
 
   return (

@@ -1,14 +1,27 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
 
+/** ラッパー：useSearchParams を使う中身を Suspense で包む */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="p-6 text-sm text-gray-500">読み込み中…</main>}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+/** ここに元のロジックを移植（useSearchParams をこの中でだけ使う） */
+function LoginContent() {
   const router = useRouter();
   const search = useSearchParams();
-  const next = search.get("next") ?? "/home"; // 成功時の遷移先（必要なら変更）
+
+  // nextのサニタイズ（外部URLを弾く）
+  const rawNext = search.get("next") ?? "/home";
+  const next = rawNext.startsWith("/") ? rawNext : "/home";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,7 +59,6 @@ export default function LoginPage() {
         setErr(error.message || "ログインに失敗しました");
         return;
       }
-      // 成功時のみ遷移
       router.replace(next);
     } catch (e: any) {
       setErr(e?.message ?? "接続に失敗しました");
@@ -56,7 +68,6 @@ export default function LoginPage() {
   };
 
   const goSignup = () => {
-    // あなたのフローでは Onboarding がサインアップの入口
     router.push("/onboarding");
   };
 
@@ -137,7 +148,7 @@ export default function LoginPage() {
             </div>
 
             <div className="pt-2 text-sm">
-              <Link href="/" className="text-emerald-700 underline">
+              <Link href="/home" className="text-emerald-700 underline">
                 HOME
               </Link>
             </div>

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadLocal, saveLocal, type LocalStore } from "./storage";
+import { ReactNode } from "react";
 
 export async function migrateLocalToDB(supabase: SupabaseClient, userId: string) {
   const local = loadLocal();
@@ -42,4 +43,13 @@ export async function saveResult(supabase: SupabaseClient, kind: "ex00"|"deus00"
   if (navigator.onLine && userId) {
     await supabase.from("results").insert({ user_id: userId, kind, payload });
   }
+}
+
+type Props = { children: ReactNode }; // ← 必須にするならこのまま
+// もし「自己閉じでもOK」にしたいなら optional にする：
+// type Props = { children?: ReactNode };
+
+export function SyncProvider({ children }: Props) {
+  // 必要な副作用やContextをここで
+  return children as React.ReactElement;
 }

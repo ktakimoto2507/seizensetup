@@ -146,7 +146,7 @@ export async function upsertProfile(args: UpsertProfileArgs) {
   if (!user_id) throw new Error("Not authenticated");
 
   const row = {
-    user_id,
+    id: user_id,
     email: args.email,
     full_name: args.full_name ?? null,
     birthday: args.birthday ?? null,
@@ -156,7 +156,7 @@ export async function upsertProfile(args: UpsertProfileArgs) {
 
   const { error } = await supabase
     .from("profiles")
-    .upsert(row, { onConflict: "user_id" });
+    .upsert(row, { onConflict: "id" });
 
   if (error) throw error;
 }

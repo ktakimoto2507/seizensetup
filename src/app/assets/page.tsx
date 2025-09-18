@@ -6,6 +6,8 @@ import { lookupZip } from "@/lib/zipcloud";
 import { Stepper } from "@/components/stepper";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { useRouter } from "next/navigation";
+import { saveAssets } from "@/lib/supabase/db";
+import { upsertAssets } from "@/lib/supabase/db";
 
 // ルートガード：step < 2 なら適切なページへ戻す
 function useAssetsGuard() {
@@ -113,14 +115,31 @@ export default function AssetsPage() {
     };
   }, [address.postalCode, setAddress]);
 
-  const goNext = () => {
-    if (!totalOk) {
-      alert("受益者の合計が100%になるよう調整してください");
-      return;
-    }
+  // 既存の goNext を置き換え（非同期化）
+const goNext = async () => {
+  if (!totalOk) {
+    alert("受益者の合計が100%になるよう調整してください");
+    return;
+  }
+  try {
+    await upsertAssets({
+      address_json: {
+        postalCode: address.postalCode,
+        prefecture: address.prefecture,
+        city: address.city,
+        town: address.town,
+        line1: address.line1, // ← line2 は使っていないので触らない
+      },
+      beneficiaries,
+    });
     setStep(3);
     router.push("/review");
-  };
+  } catch (e: any) {
+    console.error(e);
+    alert(e?.message ?? "保存に失敗しました");
+  }
+};
+
 
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-6">

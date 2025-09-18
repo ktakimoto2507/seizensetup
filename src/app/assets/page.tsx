@@ -116,22 +116,23 @@ export default function AssetsPage() {
   }, [address.postalCode, setAddress]);
 
   // 既存の goNext を置き換え（非同期化）
-const goNext = async () => {
+  const goNext = async () => {
   if (!totalOk) {
     alert("受益者の合計が100%になるよう調整してください");
     return;
   }
   try {
-    await upsertAssets({
-      address_json: {
+    await saveAssets(
+      {
         postalCode: address.postalCode,
         prefecture: address.prefecture,
         city: address.city,
         town: address.town,
-        line1: address.line1, // ← line2 は使っていないので触らない
+        line1: address.line1,
       },
-      beneficiaries,
-    });
+      beneficiaries.map(b => ({ name: b.name, percent: b.percent }))
+    );
+
     setStep(3);
     router.push("/review");
   } catch (e: any) {
@@ -139,7 +140,6 @@ const goNext = async () => {
     alert(e?.message ?? "保存に失敗しました");
   }
 };
-
 
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-6">

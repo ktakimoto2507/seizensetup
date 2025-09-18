@@ -1,18 +1,20 @@
+// src/app/pwa-register.tsx
 "use client";
+
 import { useEffect } from "react";
 
-export default function PWARegister() {
+export default function PwaRegister() {
   useEffect(() => {
+    // ★ 開発では登録しない
+    if (process.env.NODE_ENV !== "production") return;
+
     if ("serviceWorker" in navigator) {
-      const register = () => {
-        navigator.serviceWorker
-          .register("/sw.js", { scope: "/" })
-          .then((reg) => console.info("SW registered:", reg.scope))
-          .catch((err) => console.error("SW registration failed:", err));
-      };
-      if (document.readyState === "complete") register();
-      else window.addEventListener("load", register, { once: true });
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then(() => console.log("SW registered"))
+        .catch((e) => console.error("SW register failed", e));
     }
   }, []);
+
   return null;
 }

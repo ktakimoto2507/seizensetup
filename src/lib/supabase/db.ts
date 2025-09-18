@@ -25,17 +25,13 @@ export async function saveAssets(
   address: AddressInput,
   beneficiaries: BeneficiaryInput[]
 ) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authErr } = await supabase.auth.getUser();
+  if (authErr) throwSB(authErr, "auth.getUser");
   if (!user) throw new Error("not signed in");
   const user_id = user.id;
 
   // 表示用の住所（1本の文字列）
-  const addressText = [
-    address.prefecture,
-    address.city,
-    address.town,
-    address.line1,
-  ]
+  const addressText = [address.prefecture, address.city, address.town, address.line1]
     .filter(Boolean)
     .join(" ")
     .trim();
@@ -62,7 +58,7 @@ export async function saveAssets(
         },
         { onConflict: "id" }
       );
-    if (error) throw error;
+    if (error) throwSB(error, "profiles.upsert");
   }
 
   // 配分は assets_prefs.allocations に JSON として保存（上書きでOK）
@@ -78,7 +74,7 @@ export async function saveAssets(
         },
         { onConflict: "user_id" }
       );
-    if (error) throw error;
+    if (error) throwSB(error, "assets_prefs.upsert");
   }
 }
 
@@ -91,6 +87,7 @@ export async function saveKycSubmission(input: {
   front: File;             // 必須
   back?: File | null;      // パスポート時は null でOK
   selfie: File;            // 必須
+  address_confirmed?: boolean; // ← 追加
 }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
@@ -124,6 +121,7 @@ export async function saveKycSubmission(input: {
     back_path,
     selfie_path,
     status: "submitted",
+    address_confirmed: !!input.address_confirmed, // ← ここで保存
   });
   if (insertErr) throw insertErr;
 
@@ -136,10 +134,18 @@ export type UpsertProfileArgs = {
   birthday?: string | null;    // "YYYY-MM-DD"
   address?: string | null;
   address_json?: any | null;
+  phone?: string; // ← 追加
 };
-
+// 既存 upsertProfile 内で「未定義は送らない」ように整形してから upsert
+function compact<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  ) as Partial<T>;
+}
 /** ログイン中ユーザーの profiles を user_id で upsert */
 export async function upsertProfile(args: UpsertProfileArgs) {
+  const payload = compact(args); // ← undefined を落とす
+  // 例: user_id はサーバ側でトリガー or セッションから付与している前提なら省略可
   const { data: userData, error: authErr } = await supabase.auth.getUser();
   if (authErr) throw authErr;
   const user_id = userData.user?.id;
@@ -159,4 +165,42 @@ export async function upsertProfile(args: UpsertProfileArgs) {
     .upsert(row, { onConflict: "id" });
 
   if (error) throw error;
+}
+
+export async function upsertAssets(args: {
+  address_json: {
+    postalCode?: string;
+    prefecture?: string;
+    city?: string;
+    town?: string;
+    line1?: string;
+  };
+  beneficiaries: Array<{ id: string; name: string; percent: number }>;
+}) {
+  const { data: userData, error: authErr } = await supabase.auth.getUser();
+  if (authErr) throw authErr;
+  const user_id = userData.user?.id;
+  if (!user_id) throw new Error("Not authenticated");
+
+  const { error } = await supabase
+    .from("assets")
+    .upsert(
+      {
+        user_id,
+        address_json: args.address_json,
+        beneficiaries: args.beneficiaries,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+  if (error) throw error;
+}
+
+function throwSB(error: any, where: string) {
+  const msg =
+    error?.message ||
+    error?.error_description ||
+    error?.hint ||
+    JSON.stringify(error);
+  throw new Error(`[${where}] ${msg}`);
 }

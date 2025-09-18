@@ -12,6 +12,9 @@ import dynamic from "next/dynamic";
 import { ensureEmailAuth } from "@/lib/supabase/authflow";
 import { upsertProfile } from "@/lib/supabase/db";
 
+// 問い合わせ導線（HOME内の問い合わせセクション想定）
+const CONTACT_PATH = "/home#contact";
+
 const Stepper = dynamic(
   () => import("@/components/stepper").then((m) => ({ default: m.Stepper })),
   { ssr: false }
@@ -88,52 +91,84 @@ export default function OnboardingPage() {
   });
 
   const onSubmit = async (v: FormValues) => {
+  try {
+    setSubmitting(true);
+
+    // ① 旧ローカル互換（任意）
+    await finalizeRegistration(v.phone, v.password);
+
+    // ② Supabase 認証（メール重複の検知ポイント）
+    let session = null;
     try {
-      setSubmitting(true);
-
-      // ① 旧ローカル互換（任意）
-      await finalizeRegistration(v.phone, v.password);
-
-      // ② Supabase 認証（メール+パスワード）
-      const session = await ensureEmailAuth(v.email, v.password);
-      if (!session) {
-        alert("確認メールの承認が必要です。メールをご確認ください。");
-        setSubmitting(false);
-        return;
+      session = await ensureEmailAuth(v.email, v.password);
+    } catch (e: any) {
+      const msg: string = e?.message ?? "";
+      // 代表例: "User already registered" / "User already exists"
+      if (/already\s+(registered|exists)/i.test(msg)) {
+        throw new Error(
+          `このメールアドレスは既に登録済みです。` +
+          `\n\nお手数ですが、[問い合わせフォーム](${CONTACT_PATH}) からご連絡ください。`
+        );
       }
+      throw e;
+    }
 
-      // ③ profiles を upsert（この段階では住所は未入力なので最低限のみ）
+    if (!session) {
+      alert("確認メールの承認が必要です。メールをご確認ください。");
+      setSubmitting(false);
+      return;
+    }
+
+    // ③ profiles を upsert（電話重複の検知ポイント）
+    try {
       await upsertProfile({
         email: v.email,
         full_name: v.name,
         birthday: new Date(v.dob).toISOString().split("T")[0],
+        // phone は profiles 側で管理していて UNIQUE(phone) を想定
+        phone: v.phone.replace(/\D/g, "").slice(0, 11),
       });
-
-      // ④ 旧 HOME 初期表示のためのローカル profile（任意・互換）
-      if (typeof window !== "undefined") {
-        const profile = {
-          fullName: v.name,
-          email: v.email,
-          birthday: new Date(v.dob).toISOString().split("T")[0],
-          address: "",
-          note: "",
-        };
-        window.localStorage.setItem("ss_profile", JSON.stringify(profile));
-      }
-
-      // ⑤ 画面状態（既存ストア連携を維持）
-      setProfile({ name: v.name, email: v.email, phone: v.phone, dob: new Date(v.dob).toISOString().split("T")[0], password: v.password });
-      setStep(1);
-
-      // ⑥ 次へ
-      router.push("/kyc");
     } catch (e: any) {
-      console.error(e);
-      alert(e?.message ?? "送信に失敗しました");
-    } finally {
-      setSubmitting(false);
+      // 一意制約違反
+      if (e?.code === "23505") {
+        throw new Error(
+          `この電話番号は既に登録済みです。` +
+          `\n\nお手数ですが、[問い合わせフォーム](${CONTACT_PATH}) からご連絡ください。`
+        );
+      }
+      throw e;
     }
-  };
+
+    // ④ 旧 HOME 初期表示のためのローカル profile（互換）
+    if (typeof window !== "undefined") {
+      const profile = {
+        fullName: v.name,
+        email: v.email,
+        birthday: new Date(v.dob).toISOString().split("T")[0],
+        address: "",
+        note: "",
+      };
+      window.localStorage.setItem("ss_profile", JSON.stringify(profile));
+    }
+
+    // ⑤ 画面状態（既存ストア連携）
+    setProfile({
+      name: v.name, email: v.email, phone: v.phone,
+      dob: new Date(v.dob).toISOString().split("T")[0], password: v.password
+    });
+    setStep(1);
+
+    // ⑥ 次へ
+    router.push("/kyc");
+  } catch (e: any) {
+    console.error(e);
+    // Markdownリンクのまま alert だと飛べないので、画面上に出すのがベター
+    alert((e?.message ?? "送信に失敗しました").replace(/\[|\]|\(|\)/g, ""));
+  } finally {
+    setSubmitting(false);
+  }
+};
+
 
   return (
     <div className="max-w-md mx-auto p-4">

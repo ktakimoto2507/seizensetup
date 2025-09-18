@@ -47,3 +47,20 @@ public/sw.js
 public/workbox-*.js
 
 public/fallback-*.js
+
+# env/ローカル
+.env
+.env.local
+.env.*.local
+.vercel
+.next
+node_modules
+# Supabaseの一時・生成物（必要に応じて）
+supabase/.temp
+supabase/.branches
+# ローカルバックアップや個人用
+*.log
+.DS_Store
+Thumbs.db
+# 開発用ページを本番に出さないなら
+src/app/dev/

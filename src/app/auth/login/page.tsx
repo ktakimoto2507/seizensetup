@@ -68,7 +68,7 @@ function LoginContent() {
   };
 
   const goSignup = () => {
-    router.push("/onboarding");
+    router.push(`/auth/signup?next=${encodeURIComponent("/onboarding")}`);
   };
 
   return (

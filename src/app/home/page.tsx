@@ -40,6 +40,20 @@ function renderScoreLine(r: any) {
   return `${info.name}${diff}／${info.scoreWhat}：${r.score}${unit}`;
 }
 
+// Supabaseのaddress_json→表示用文字列
+function formatAddressText(a?: {
+  postalCode?: string | null;
+  prefecture?: string | null;
+  city?: string | null;
+  town?: string | null;
+  line1?: string | null;
+} | null) {
+  if (!a) return "";
+  const parts = [a.prefecture, a.city, a.town, a.line1].filter(Boolean);
+  return parts.join(" ").trim();
+}
+
+
 // Assets 側からの住所（分割）を結合
 function pickAddressFromAssets(): string {
   if (typeof window === "undefined") return "";
@@ -147,9 +161,57 @@ export default function HomeDashboard() {
     if (a?.phone) setPhoneEdit(a.phone);
     else if (s?.phone) setPhoneEdit(s.phone);
 
-    setResults(loadJSON<TestResult[]>("ss_results") ?? []);
+    //setResults(loadJSON<TestResult[]>("ss_results") ?? []);
     setHydrated(true);
   }, []);
+
+  // ③ DBからプロフィール＆最近の結果（本人のみ）を取得
+useEffect(() => {
+  if (!userEmail) return;
+
+  (async () => {
+    // まずサインイン中の user.id を取得
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // プロフィール：address優先、無ければaddress_jsonを整形
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name, birthday, email, address, address_json")
+      .eq("id", user.id)
+      .single();
+
+    if (!isEditing) { // 編集中は上書きしない
+      if (profile?.display_name) setFullName(profile.display_name);
+      if (profile?.birthday) setBirthday(profile.birthday);
+      if (profile?.email) setEmail(profile.email);
+      const addrFromDB =
+        (profile?.address ?? "") ||
+        formatAddressText(profile?.address_json);
+      if (addrFromDB) setAddress(addrFromDB);
+    }
+
+    // 最近の結果：本人限定
+    const { data: rows } = await supabase
+      .from("results")
+      .select("app_id, score, meta, started_at, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    // 画面の型にマッピング（localStorage互換）
+    const mapped: TestResult[] = (rows ?? []).map((r) => ({
+      id: (r as any).app_id as TestResult["id"],
+      score: (r as any).score ?? 0,
+      meta: (r as any).meta ?? {},
+      startedAt: (r as any).started_at ?? (r as any).created_at ?? "",
+      finishedAt: (r as any).created_at ?? "",
+    }));
+    setResults(mapped);
+  })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [userEmail]);
+
 
   // --- Render guards ---
   if (!authChecked) {
@@ -239,7 +301,7 @@ function cancelEdit() {
 
   // ==== UI（元のHOMEの本文をそのまま表示） ====
   return (
-    <main className="mx-auto max-w-5xl p-6 space-y-6">
+    <main className="mx-auto max-w-5xl p-6 space-y-6 bg-[#EAF7F2] min-h-[calc(100vh-4rem)]">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">HOME（ダッシュボード）</h1>
         <div className="flex items-center gap-3 text-sm text-gray-700">
@@ -257,7 +319,7 @@ function cancelEdit() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 左：プロフィール＋アカウント（閲覧→編集） */}
         <div className="lg:col-span-2">
-          <div className="rounded-2xl bg-white p-6 shadow">
+          <div className="rounded-2xl bg-white p-6 shadow ring-1 ring-emerald-200/70">
             <div className="flex items-center justify-between mb-4">
   <h2 className="text-lg font-semibold">プロフィールの確認・編集</h2>
 
@@ -356,7 +418,7 @@ function cancelEdit() {
 
               <div className="md:col-span-2 flex items-center gap-3 mt-2">
                 <button
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60 hover:bg-emerald-700"
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60 hover:bg-emerald-700 shadow-sm"
                   type="submit"
                   disabled={!isEditing || saving}
                     >
@@ -373,9 +435,9 @@ function cancelEdit() {
           <div className="rounded-2xl bg-white p-6 shadow">
             <h2 className="text-lg font-semibold mb-3">アプリ</h2>
             <div className="grid grid-cols-1 gap-3">
-              <a href="/apps/ex00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50">記憶力診断</a>
-              <a href="/apps/deus00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50">タイピング測定（百人一首）</a>
-              <a href="/apps/machina00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50">座標当てゲーム</a>
+              <a href="/apps/ex00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-600 text-emerald-700">記憶力診断</a>
+              <a href="/apps/deus00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-600 text-emerald-700">タイピング測定（百人一首）</a>
+              <a href="/apps/machina00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-600 text-emerald-700">座標当てゲーム</a>
             </div>
           </div>
 

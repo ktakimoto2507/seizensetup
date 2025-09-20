@@ -67,6 +67,7 @@ function LoginContent() {
     }
   };
 
+
   // ★ ここを修正：/onboarding?guest=1 へ遷移
   const goSignup = () => {
     router.push("/onboarding?guest=1");

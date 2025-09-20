@@ -41,3 +41,11 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# PWA build artifacts
+/public/sw.js
+/public/workbox-*.js
+/public/fallback-*.js
+
+# local dev sandbox
+/src/app/dev/

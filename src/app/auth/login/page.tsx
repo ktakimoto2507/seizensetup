@@ -150,7 +150,7 @@ function LoginContent() {
             </div>
 
             <div className="pt-2 text-sm">
-              <Link href="/home" className="text-emerald-700 underline">
+              <Link href="/" className="text-emerald-700 underline">
                 HOME
               </Link>
             </div>

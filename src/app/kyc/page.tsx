@@ -4,8 +4,12 @@ import { useRouter } from "next/navigation";
 import { Stepper } from "@/components/stepper";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { useAppStore } from "@/lib/store";
-import type { DocType, EkycPayload } from "@/lib/ekyc";
-import { submitEkyc } from "@/lib/ekyc";
+import type { DocType } from "@/lib/ekyc";
+// import { submitEkyc } from "@/lib/ekyc";
+import { saveKycSubmission } from "@/lib/supabase/db";
+
+// ※ KycUploader を使う場合はコメントを外して、本文中の好きな場所に <KycUploader /> を置いてください
+// import KycUploader from "./_components/KycUploader";
 
 function usePreviewURL(file: File | null) {
   const [url, setUrl] = useState<string>("");
@@ -78,33 +82,42 @@ export default function KycPage() {
     return n;
   }, [backNeeded, front, back, selfie, addrConfirmed]);
 
-  async function handleNext() {
-    setError("");
-    if (!ready) {
-      setError("必要な項目が揃っていません。");
-      return;
-    }
-    if (!front || !selfie) return;
-    const payload: EkycPayload = { docType, front, back, selfie, addressConfirmed: addrConfirmed };
-    setSubmitting(true);
-    try {
-      const result = await submitEkyc(payload);
-      if (!result.ok) {
-        setError(result.reason ?? "本人確認に失敗しました。");
-        setSubmitting(false);
-        return;
-      }
-      setStep(2);
-      router.push("/assets");
-    } catch {
-      setError("接続に失敗しました。時間をおいて再試行してください。");
-      setSubmitting(false);
-    }
+async function handleNext() {
+  setError("");
+  if (!ready) {
+    setError("必要な項目が揃っていません。");
+    return;
   }
+  if (!front || !selfie) return;
+
+  setSubmitting(true);
+  try {
+    await saveKycSubmission({
+      doc_type: docType, // ← 型に合わせて snake_case
+      front,
+      back,
+      selfie,
+      address_confirmed: addrConfirmed, // ← 保存したいなら渡す
+    });
+    setStep(2);
+    router.push("/assets");
+  } catch (e: any) {
+    console.error(e);
+    setError(e?.message ?? "アップロードに失敗しました。");
+  } finally {
+    setSubmitting(false);
+  }
+}
+
+
 
   return (
     <div className="max-w-xl mx-auto p-4 space-y-6">
       <Stepper />
+
+      {/* KycUploader を併用したい場合はここに表示
+      <KycUploader />
+      */}
 
       <Card>
         <CardHeader>本人確認（KYC）</CardHeader>

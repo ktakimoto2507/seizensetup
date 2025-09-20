@@ -1,142 +1,165 @@
 ﻿"use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { hashPassword, verifyPassword } from "@/lib/auth";
 
-type Account = { phone?: string; passwordHash?: string; password?: string; createdAt?: string; updatedAt?: string };
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase/client";
 
-const PHONE_11 = /^\d{11}$/;
-const PW_RULE  = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
-
-function loadJSON<T>(key: string): T | null {
-  if (typeof window === "undefined") return null;
-  try { const v = window.localStorage.getItem(key); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
-}
-function saveJSON<T>(key: string, value: T) {
-  if (typeof window === "undefined") return; window.localStorage.setItem(key, JSON.stringify(value));
-}
-
-async function migrateAccountIfNeeded(acc: Account, plainPwCandidate: string | null): Promise<Account | null> {
-  // 電話番号を 11桁数字へ正規化
-  const normalizedPhone = (acc.phone ?? "").replace(/\D/g, "").slice(0, 11);
-  let changed = false;
-  if (acc.phone !== normalizedPhone && normalizedPhone) { acc.phone = normalizedPhone; changed = true; }
-
-  // passwordHash が無い／sha256: でない → 平文があればハッシュ化
-  const hasHashed = typeof acc.passwordHash === "string" && acc.passwordHash.startsWith("sha256:");
-  if (!hasHashed) {
-    // 1) ss_account に平文 password が残っている場合
-    if (typeof acc.password === "string" && acc.password.length >= 1) {
-      acc.passwordHash = await hashPassword(acc.password);
-      delete acc.password;
-      changed = true;
-    }
-    // 2) 平文 password が ss_account に無いが、ユーザー入力があるなら「今回だけ」平文比較で認証し、成功したらハッシュ化に移行
-    else if (plainPwCandidate) {
-      // 旧実装で平文保存されていた場合の後方互換：一致ならハッシュ化して保存に移行
-      // ここでは一致判定ができない（平文が保存されていない）ため、実際の検証は後段で tryPlain フラグを返して行う
-    }
-  }
-
-  if (!acc.phone || !PHONE_11.test(acc.phone)) return null;
-
-  if (changed) {
-    acc.updatedAt = new Date().toISOString();
-    saveJSON("ss_account", acc);
-  }
-  return acc;
-}
-
+/** ラッパー：useSearchParams を使う中身を Suspense で包む */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="p-6 text-sm text-gray-500">読み込み中…</main>}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+/** ここに元のロジックを移植（useSearchParams をこの中でだけ使う） */
+function LoginContent() {
   const router = useRouter();
-  const [phone, setPhone] = useState("");
-  const [pw, setPw] = useState("");
+  const search = useSearchParams();
+
+  // nextのサニタイズ（外部URLを弾く）
+  const rawNext = search.get("next") ?? "/home";
+  const next = rawNext.startsWith("/") ? rawNext : "/home";
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [alreadySignedIn, setAlreadySignedIn] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    setMounted(true);
+    // すでにサインイン済みかだけを表示用にチェック（自動遷移はしない）
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAlreadySignedIn(!!session);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setAlreadySignedIn(!!s);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const isDisabled = !mounted || !email || !password || submitting;
+
+  const login = async () => {
     setErr(null);
-
-    const phoneDigits = phone.replace(/\D/g, "").slice(0, 11);
-    if (!PHONE_11.test(phoneDigits)) { setErr("電話番号は11桁で入力してください。"); return; }
-    if (!PW_RULE.test(pw)) { setErr("パスワードは8文字以上で英数字を含めてください。"); return; }
-
-    let acc = loadJSON<Account>("ss_account");
-    if (!acc) { setErr("登録データが見つかりません。まずは初回登録を行ってください。"); return; }
-
-    // ★ 後方互換マイグレーション（電話の正規化＋平文→ハッシュ化）
-    acc = await migrateAccountIfNeeded(acc, pw);
-    if (!acc) { setErr("登録データの形式が不正です。再登録をお試しください。"); return; }
-
-    if (acc.phone !== phoneDigits) { setErr("電話番号が一致しません。"); return; }
-
-    setLoading(true);
-
-    let ok = false;
-    if (typeof acc.passwordHash === "string" && acc.passwordHash.startsWith("sha256:")) {
-      ok = await verifyPassword(pw, acc.passwordHash);
-    } else if (typeof (acc as any).password === "string") {
-      // 超後方互換：acc.password が残っていたケース
-      ok = (acc as any).password === pw;
-      if (ok) {
-        acc.passwordHash = await hashPassword(pw);
-        delete (acc as any).password;
-        acc.updatedAt = new Date().toISOString();
-        saveJSON("ss_account", acc);
+    setMsg(null);
+    setSubmitting(true);
+    try {
+      const emailNorm = email.trim().toLowerCase();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailNorm,
+        password,
+      });
+      if (error) {
+        setErr(error.message || "ログインに失敗しました");
+        return;
       }
-    } else {
-      // hash も平文も無い → 旧データ破損
-      ok = false;
+      router.replace(next);
+    } catch (e: any) {
+      setErr(e?.message ?? "接続に失敗しました");
+    } finally {
+      setSubmitting(false);
     }
+  };
 
-    setLoading(false);
-
-    if (!ok) { setErr("パスワードが一致しません。"); return; }
-
-    saveJSON("ss_session", { phone: acc.phone, loggedInAt: new Date().toISOString() });
-    router.push("/home");
-  }
+  const goSignup = () => {
+    router.push(`/auth/signup?next=${encodeURIComponent("/onboarding")}`);
+  };
 
   return (
-    <main className="max-w-md mx-auto p-6">
-      <h1 className="text-2xl font-bold">ログイン</h1>
-      <p className="text-sm text-gray-600 mt-1">電話番号（ID）とパスワードでログインします。</p>
+    <main className="min-h-[calc(100vh-4rem)] bg-emerald-50/40 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* カード */}
+        <div className="rounded-2xl bg-white shadow-lg ring-1 ring-emerald-100 overflow-hidden">
+          {/* ヘッダー */}
+          <div className="bg-emerald-600 text-white px-6 py-4">
+            <h1 className="text-xl font-bold">ログイン</h1>
+            {alreadySignedIn && (
+              <p className="mt-1 text-emerald-100 text-sm">
+                すでにログイン済みです（自動遷移はしません）。{" "}
+                <Link href="/home" className="underline font-semibold">
+                  HOMEへ移動
+                </Link>
+              </p>
+            )}
+          </div>
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-        <label className="block">
-          <span className="block text-sm text-gray-600 mb-1">電話番号（11桁）</span>
-          <input
-            className="w-full rounded-xl border px-3 py-2"
-            inputMode="numeric"
-            maxLength={11}
-            placeholder="090xxxxxxxx"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            required
-          />
-        </label>
+          {/* 本文 */}
+          <div className="px-6 py-6 space-y-4">
+            {err && (
+              <div
+                className="rounded-xl bg-red-50 text-red-700 px-4 py-2 text-sm"
+                role="alert"
+                aria-live="polite"
+              >
+                {err}
+              </div>
+            )}
+            {msg && (
+              <div className="rounded-xl bg-emerald-50 text-emerald-700 px-4 py-2 text-sm">
+                {msg}
+              </div>
+            )}
 
-        <label className="block">
-          <span className="block text-sm text-gray-600 mb-1">パスワード</span>
-          <input
-            className="w-full rounded-xl border px-3 py-2"
-            type="password"
-            placeholder="••••••••"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            required
-          />
-        </label>
+            <label className="block text-sm font-medium text-gray-700">
+              メールアドレス
+              <input
+                className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-400"
+                placeholder="example@mail.com"
+                inputMode="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </label>
 
-        {err && <p className="text-sm text-red-600">{err}</p>}
+            <label className="block text-sm font-medium text-gray-700">
+              パスワード
+              <input
+                className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-400"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
 
-        <button type="submit" className="w-full rounded-xl bg-black text-white px-4 py-2 disabled:opacity-70" disabled={loading}>
-          {loading ? "確認中…" : "ログイン"}
-        </button>
+            <div className="flex gap-3 pt-2">
+              <button
+                className="flex-1 rounded-2xl bg-emerald-600 px-4 py-2 text-white font-medium disabled:opacity-60 hover:bg-emerald-700 transition"
+                onClick={login}
+                disabled={isDisabled}
+              >
+                {submitting ? "サインイン中…" : "ログイン"}
+              </button>
+              <button
+                className="flex-1 rounded-2xl border border-emerald-600 px-4 py-2 text-emerald-700 font-medium hover:bg-emerald-50 transition"
+                onClick={goSignup}
+                type="button"
+              >
+                新規登録
+              </button>
+            </div>
 
-        <p className="text-xs text-gray-500 mt-2">※ パスワード要件: 8文字以上・英数字混在</p>
-      </form>
+            <div className="pt-2 text-sm">
+              <Link href="/home" className="text-emerald-700 underline">
+                HOME
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* フッター補助リンク（任意） */}
+        <div className="text-center text-xs text-gray-500 mt-3">
+          パスワードをお忘れの場合は管理者へお問い合わせください。
+        </div>
+      </div>
     </main>
   );
 }

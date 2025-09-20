@@ -9,49 +9,26 @@ import { useRouter } from "next/navigation";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { useAppStore } from "@/lib/store";
 import dynamic from "next/dynamic";
+import { ensureEmailAuth } from "@/lib/supabase/authflow";
+import { upsertProfile } from "@/lib/supabase/db";
 
-// 置き換え版：ハイフン等を除去して 11 桁数字で保存
-async function finalizeRegistration(phoneInput: string, plainPassword: string) {
-  // 1) 電話番号を数字だけに正規化（ハイフン等を除去）
-  const phone = phoneInput.replace(/\D/g, '').slice(0, 11);
+// 問い合わせ導線（HOME内の問い合わせセクション想定）
+const CONTACT_PATH = "/home#contact";
 
-  // 2) 最低限のバリデーション
-  const PHONE_11 = /^\d{11}$/;
-  const PW_RULE  = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+const Stepper = dynamic(
+  () => import("@/components/stepper").then((m) => ({ default: m.Stepper })),
+  { ssr: false }
+);
 
-  if (!PHONE_11.test(phone)) {
-    throw new Error('電話番号は11桁の数字で入力してください。');
-  }
-  if (!PW_RULE.test(plainPassword)) {
-    throw new Error('パスワードは8文字以上で英数字を含めてください。');
-  }
-
-  // 3) ハッシュ化して保存（localStorage）
-  const passwordHash = await hashPassword(plainPassword);
-  const now = new Date().toISOString();
-
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(
-      'ss_account',
-      JSON.stringify({ phone, passwordHash, createdAt: now, updatedAt: now })
-    );
-    window.localStorage.setItem('ss_onboarded', JSON.stringify(true)); // booleanで保持
-  }
-}
-
-const Stepper = dynamic(() => import("@/components/stepper").then(m => ({ default: m.Stepper })), { ssr: false });
-
+// 電話番号の表示用フォーマット（090-1234-5678）
 const phoneRegex = /^\d{2,4}-\d{3,4}-\d{3,4}$/;
 
-// ここに置き換え
 const schema = z.object({
   name: z.string().min(1, "氏名は必須です"),
   email: z.string().email("メール形式が正しくありません"),
-  phone: z.string().regex(
-    phoneRegex,
-    "電話番号は 090-1234-5678 形式で入力してください"
-  ),
-  // フォームの入力は string（YYYY-MM-DD）。Zod で妥当性チェックのみ行う
+  phone: z
+    .string()
+    .regex(phoneRegex, "電話番号は 090-1234-5678 形式で入力してください"),
   dob: z
     .string()
     .min(1, "生年月日を入力してください")
@@ -68,16 +45,35 @@ const schema = z.object({
   password: z.string().min(8, "8文字以上で入力してください"),
 });
 
-// ★ フォーム値の型は「入力型」を使う（= dob は string）
+// 入力型（dob は string）
 type FormValues = z.input<typeof schema>;
 
-/** 数字だけを取り出して 3-4-4 に整形（簡易） */
 function formatPhone(input: string) {
   const digits = input.replace(/\D/g, "");
   if (digits.length <= 3) return digits;
   if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   const d = digits.slice(0, 11);
   return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+}
+
+/** 旧ローカル仕様：電話/パスワードを localStorage に保存（互換維持用） */
+async function finalizeRegistration(phoneInput: string, plainPassword: string) {
+  const phone = phoneInput.replace(/\D/g, "").slice(0, 11);
+  const PHONE_11 = /^\d{11}$/;
+  const PW_RULE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+  if (!PHONE_11.test(phone)) throw new Error("電話番号は11桁の数字で入力してください。");
+  if (!PW_RULE.test(plainPassword)) throw new Error("パスワードは8文字以上で英数字を含めてください。");
+
+  const passwordHash = await hashPassword(plainPassword);
+  const now = new Date().toISOString();
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(
+      "ss_account",
+      JSON.stringify({ phone, passwordHash, createdAt: now, updatedAt: now })
+    );
+    window.localStorage.setItem("ss_onboarded", JSON.stringify(true));
+  }
 }
 
 export default function OnboardingPage() {
@@ -95,34 +91,84 @@ export default function OnboardingPage() {
   });
 
   const onSubmit = async (v: FormValues) => {
+  try {
     setSubmitting(true);
-    setProfile({
-      name: v.name,
-      email: v.email,
-      phone: v.phone,
-      dob: new Date(v.dob).toISOString().split("T")[0],
-      password: v.password,
-    });
-    setStep(1);
+
+    // ① 旧ローカル互換（任意）
     await finalizeRegistration(v.phone, v.password);
 
-    // 初期プロフィールも localStorage に保存（HOME 初回表示用）
-      if (typeof window !== "undefined") {
-        const profile = {
-          fullName: v.name,
-          email: v.email,
-          birthday: new Date(v.dob).toISOString().split("T")[0],
-          address: "",
-          note: "",
-        };
-        window.localStorage.setItem("ss_profile", JSON.stringify(profile));
+    // ② Supabase 認証（メール重複の検知ポイント）
+    let session = null;
+    try {
+      session = await ensureEmailAuth(v.email, v.password);
+    } catch (e: any) {
+      const msg: string = e?.message ?? "";
+      // 代表例: "User already registered" / "User already exists"
+      if (/already\s+(registered|exists)/i.test(msg)) {
+        throw new Error(
+          `このメールアドレスは既に登録済みです。` +
+          `\n\nお手数ですが、[問い合わせフォーム](${CONTACT_PATH}) からご連絡ください。`
+        );
       }
+      throw e;
+    }
 
-    await new Promise((r) => setTimeout(r, 300));
+    if (!session) {
+      alert("確認メールの承認が必要です。メールをご確認ください。");
+      setSubmitting(false);
+      return;
+    }
+
+    // ③ profiles を upsert（電話重複の検知ポイント）
+    try {
+      await upsertProfile({
+        email: v.email,
+        full_name: v.name,
+        birthday: new Date(v.dob).toISOString().split("T")[0],
+        // phone は profiles 側で管理していて UNIQUE(phone) を想定
+        phone: v.phone.replace(/\D/g, "").slice(0, 11),
+      });
+    } catch (e: any) {
+      // 一意制約違反
+      if (e?.code === "23505") {
+        throw new Error(
+          `この電話番号は既に登録済みです。` +
+          `\n\nお手数ですが、[問い合わせフォーム](${CONTACT_PATH}) からご連絡ください。`
+        );
+      }
+      throw e;
+    }
+
+    // ④ 旧 HOME 初期表示のためのローカル profile（互換）
+    if (typeof window !== "undefined") {
+      const profile = {
+        fullName: v.name,
+        email: v.email,
+        birthday: new Date(v.dob).toISOString().split("T")[0],
+        address: "",
+        note: "",
+      };
+      window.localStorage.setItem("ss_profile", JSON.stringify(profile));
+    }
+
+    // ⑤ 画面状態（既存ストア連携）
+    setProfile({
+      name: v.name, email: v.email, phone: v.phone,
+      dob: new Date(v.dob).toISOString().split("T")[0], password: v.password
+    });
+    setStep(1);
+
+    // ⑥ 次へ
     router.push("/kyc");
-
+  } catch (e: any) {
+    console.error(e);
+    // Markdownリンクのまま alert だと飛べないので、画面上に出すのがベター
+    alert((e?.message ?? "送信に失敗しました").replace(/\[|\]|\(|\)/g, ""));
+  } finally {
     setSubmitting(false);
-  };
+  }
+};
+
 
   return (
     <div className="max-w-md mx-auto p-4">
@@ -131,21 +177,18 @@ export default function OnboardingPage() {
         <CardHeader>オンボーディング</CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-            {/* 氏名 */}
             <div>
               <label htmlFor="name" className="block mb-1 font-medium">氏名</label>
               <Input id="name" placeholder="例：山田 太郎" {...register("name")} />
               {errors.name && <p className="text-red-600 text-sm mt-1">{errors.name.message}</p>}
             </div>
 
-            {/* メール */}
             <div>
               <label htmlFor="email" className="block mb-1 font-medium">メールアドレス</label>
               <Input id="email" type="email" inputMode="email" placeholder="example@mail.com" {...register("email")} />
               {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email.message}</p>}
             </div>
 
-            {/* 電話番号（register の onChange で自動整形） */}
             <div>
               <label htmlFor="phone" className="block mb-1 font-medium">電話番号</label>
               <Input
@@ -153,22 +196,18 @@ export default function OnboardingPage() {
                 inputMode="numeric"
                 placeholder="090-1234-5678"
                 {...register("phone", {
-                  onChange: (e) => {
-                    e.target.value = formatPhone(e.target.value);
-                  },
+                  onChange: (e) => { e.target.value = formatPhone(e.target.value); },
                 })}
               />
               {errors.phone && <p className="text-red-600 text-sm mt-1">{errors.phone.message}</p>}
             </div>
 
-            {/* 生年月日 */}
             <div>
               <label htmlFor="dob" className="block mb-1 font-medium">生年月日</label>
               <Input id="dob" type="date" {...register("dob")} min={minStr} max={todayStr} />
               {errors.dob && <p className="text-red-600 text-sm mt-1">{errors.dob.message}</p>}
             </div>
 
-            {/* パスワード（表示切替） */}
             <div>
               <label htmlFor="password" className="block mb-1 font-medium">パスワード</label>
               <div className="relative">

@@ -11,6 +11,17 @@ import { useAppStore } from "@/lib/store";
 import dynamic from "next/dynamic";
 import { ensureEmailAuth } from "@/lib/supabase/authflow";
 import { upsertProfile } from "@/lib/supabase/db";
+import Link from "next/link";
+
+// 電話番号の表示用フォーマット（090-1234-5678）
+const phoneRegex = /^\d{2,4}-\d{3,4}-\d{3,4}$/;
+
+// ▼ 追加：パスワードで使える記号（表示にも使う）
+const ALLOWED_SYMBOLS = `!@#$%^&*()_-+=[]{};:,.<>/?~`;
+
+// ▼ 追加：英字+数字を各1文字以上含む、8文字以上、上記記号も許可
+const passwordRegex =
+  /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_\-+=\[\]{};:,.<>\/?~]{8,}$/;
 
 // 問い合わせ導線（HOME内の問い合わせセクション想定）
 const CONTACT_PATH = "/home#contact";
@@ -19,9 +30,6 @@ const Stepper = dynamic(
   () => import("@/components/stepper").then((m) => ({ default: m.Stepper })),
   { ssr: false }
 );
-
-// 電話番号の表示用フォーマット（090-1234-5678）
-const phoneRegex = /^\d{2,4}-\d{3,4}-\d{3,4}$/;
 
 const schema = z.object({
   name: z.string().min(1, "氏名は必須です"),
@@ -42,7 +50,12 @@ const schema = z.object({
       if (m < 0 || (m === 0 && t.getDate() < d.getDate())) age--;
       return age >= 18;
     }, { message: "18歳以上のみ登録可能です" }),
-  password: z.string().min(8, "8文字以上で入力してください"),
+  password: z
+    .string()
+    .regex(
+      passwordRegex,
+      `英字と数字を各1文字以上含む8文字以上で入力してください。使用可能記号: ${ALLOWED_SYMBOLS}`
+    ),
 });
 
 // 入力型（dob は string）
@@ -60,9 +73,13 @@ function formatPhone(input: string) {
 async function finalizeRegistration(phoneInput: string, plainPassword: string) {
   const phone = phoneInput.replace(/\D/g, "").slice(0, 11);
   const PHONE_11 = /^\d{11}$/;
-  const PW_RULE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+  const PW_RULE = passwordRegex;
   if (!PHONE_11.test(phone)) throw new Error("電話番号は11桁の数字で入力してください。");
-  if (!PW_RULE.test(plainPassword)) throw new Error("パスワードは8文字以上で英数字を含めてください。");
+  if (!PW_RULE.test(plainPassword)) {
+    throw new Error(
+      `パスワードは英字と数字を各1文字以上含む8文字以上で入力してください。使用可能記号: ${ALLOWED_SYMBOLS}`
+    );
+  }
 
   const passwordHash = await hashPassword(plainPassword);
   const now = new Date().toISOString();
@@ -85,7 +102,7 @@ export default function OnboardingPage() {
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const minStr = "1900-01-01";
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, formState: { errors }, setError } = useForm<FormValues>({
     resolver: zodResolver(schema),
     mode: "onBlur",
   });
@@ -105,10 +122,13 @@ export default function OnboardingPage() {
       const msg: string = e?.message ?? "";
       // 代表例: "User already registered" / "User already exists"
       if (/already\s+(registered|exists)/i.test(msg)) {
-        throw new Error(
-          `このメールアドレスは既に登録済みです。` +
-          `\n\nお手数ですが、[問い合わせフォーム](${CONTACT_PATH}) からご連絡ください。`
-        );
+        // ▼ ここで throw せず、フォームの email にエラー表示
+        setError("email", {
+          type: "manual",
+          message: "このメールアドレスは既に登録済みです。お手数ですが、問い合わせフォームからご連絡ください。"
+        });
+        setSubmitting(false);
+        return; // ここで処理を止める
       }
       throw e;
     }
@@ -178,19 +198,19 @@ export default function OnboardingPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             <div>
-              <label htmlFor="name" className="block mb-1 font-medium">氏名</label>
+              <label htmlFor="name" className="block mb-1 font-medium text-emerald-700">氏名</label>
               <Input id="name" placeholder="例：山田 太郎" {...register("name")} />
               {errors.name && <p className="text-red-600 text-sm mt-1">{errors.name.message}</p>}
             </div>
 
             <div>
-              <label htmlFor="email" className="block mb-1 font-medium">メールアドレス</label>
+              <label htmlFor="email" className="block mb-1 font-medium text-emerald-700">メールアドレス</label>
               <Input id="email" type="email" inputMode="email" placeholder="example@mail.com" {...register("email")} />
               {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email.message}</p>}
             </div>
 
             <div>
-              <label htmlFor="phone" className="block mb-1 font-medium">電話番号</label>
+              <label htmlFor="phone" className="block mb-1 font-medium text-emerald-700">電話番号</label>
               <Input
                 id="phone"
                 inputMode="numeric"
@@ -203,15 +223,25 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label htmlFor="dob" className="block mb-1 font-medium">生年月日</label>
+              <label htmlFor="dob" className="block mb-1 font-medium text-emerald-700">生年月日</label>
               <Input id="dob" type="date" {...register("dob")} min={minStr} max={todayStr} />
               {errors.dob && <p className="text-red-600 text-sm mt-1">{errors.dob.message}</p>}
             </div>
 
             <div>
-              <label htmlFor="password" className="block mb-1 font-medium">パスワード</label>
+              <label htmlFor="password" className="block mb-1 font-medium text-emerald-700">パスワード</label>
               <div className="relative">
-                <Input id="password" type={showPw ? "text" : "password"} {...register("password")} />
+                <Input
+                  id="password"
+                  type={showPw ? "text" : "password"}
+                  // ▼ ブラウザ側でも同じ制約を適用（Zodと同じ正規表現ルール）
+                  pattern="(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_\-+=\[\]{};:,.<>\/?~]{8,}"
+                  title={`英字と数字を各1文字以上含む8文字以上。使用可能記号: ${ALLOWED_SYMBOLS}`}
+                  autoComplete="new-password"
+                  {...register("password")}
+                  aria-describedby="passwordHelp"
+                />
+
                 <button
                   type="button"
                   aria-label={showPw ? "パスワードを隠す" : "パスワードを表示"}
@@ -220,13 +250,30 @@ export default function OnboardingPage() {
                 >
                   {showPw ? "隠す" : "表示"}
                 </button>
-              </div>
-              {errors.password && <p className="text-red-600 text-sm mt-1">{errors.password.message}</p>}
+                          </div>
+                          <p id="passwordHelp" className="text-xs text-emerald-700 mt-1">
+                英字＋数字を必須（8文字以上）。推奨：大文字・記号の併用。使用可能記号：
+                <code className="px-1 py-0.5 bg-gray-100 rounded">{ALLOWED_SYMBOLS}</code>
+              </p>
+
+              {errors.password && (
+                <p className="text-red-600 text-sm mt-1">{errors.password.message}</p>
+              )}
+    
             </div>
 
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting ? "送信中..." : "次へ（本人確認へ）"}
             </Button>
+
+            <Link
+              href="/auth/login"
+              role="button"
+              aria-label="新規登録・ログインの画面に戻る"
+              className="mt-3 block w-full rounded-2xl border border-emerald-600 text-emerald-700 bg-white hover:bg-emerald-50 px-4 py-3 text-center font-medium"
+            >
+              新規登録・ログインの画面に戻る
+            </Link>
           </form>
         </CardContent>
       </Card>

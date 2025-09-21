@@ -13,6 +13,15 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "SeizenSetup",
   description: "SeizenSetup app",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icons/icon-512.png", type: "image/png", sizes: "512x512" }
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }]
+  }
 };
 
 export default function RootLayout({

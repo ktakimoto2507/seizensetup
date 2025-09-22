@@ -17,8 +17,6 @@ type TestResult = {
   score: number;
   meta: Record<string, any>;
 };
-// ★追加: 受益者配分の型（assets と合わせる）20250922
-type Beneficiary = { id?: string; name: string; percent: number };
 
 // 受益者配分の型　20250922
 type Beneficiary = {

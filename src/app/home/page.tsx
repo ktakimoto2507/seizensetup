@@ -29,7 +29,6 @@ type Beneficiary = {
   relationNote?: string;   // 追加：続き柄=その他の際の補足テキスト
 };
 
-
 // ==== Helpers ====
 const PHONE_11 = /^\d{11}$/;
 function loadJSON<T>(key: string): T | null {

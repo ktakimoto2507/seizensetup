@@ -15,6 +15,8 @@ type TestResult = {
   score: number;
   meta: Record<string, any>;
 };
+// ★追加: 受益者配分の型（assets と合わせる）20250922
+type Beneficiary = { id?: string; name: string; percent: number };
 
 // ==== Helpers ====
 const PHONE_11 = /^\d{11}$/;
@@ -39,7 +41,18 @@ function renderScoreLine(r: any) {
   const unit = info.unit ? ` ${info.unit}` : "";
   return `${info.name}${diff}／${info.scoreWhat}：${r.score}${unit}`;
 }
-
+// ...（helpers の下あたりに追加）20250922
+function loadBeneficiariesFromLocal(): Beneficiary[] {
+  try {
+    const raw = localStorage.getItem("seizensetup_store_v1");
+    if (!raw) return [];
+    const obj = JSON.parse(raw);
+    const arr = obj?.beneficiaries ?? [];
+    return Array.isArray(arr) ? arr.map((b: any) => ({ name: b.name, percent: Number(b.percent) || 0 })) : [];
+  } catch {
+    return [];
+  }
+}
 // Supabaseのaddress_json→表示用文字列
 function formatAddressText(a?: {
   postalCode?: string | null;
@@ -98,6 +111,8 @@ export default function HomeDashboard() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [results, setResults] = useState<TestResult[]>([]);
+  // ★追加: 受益者配分（HOMEでは閲覧専用）20250922
+  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
   // 編集モードと保存中フラグ
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -109,6 +124,16 @@ export default function HomeDashboard() {
     const d = String(t.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }, []);
+  
+  // 受益者の見た目用（合計と、0%を非表示にしたリスト）
+    const totalPct = useMemo(
+      () => beneficiaries.reduce((s, b) => s + (Number.isFinite(b.percent) ? b.percent : 0), 0),
+      [beneficiaries]
+    );
+    const visibleBeneficiaries = useMemo(
+      () => beneficiaries.filter(b => (Number(b.percent) || 0) > 0),
+      [beneficiaries]
+    );
 
   // ① 認証ガード
   useEffect(() => {
@@ -208,6 +233,46 @@ useEffect(() => {
       finishedAt: (r as any).created_at ?? "",
     }));
     setResults(mapped);
+    // 受益者配分の取得（DB → JSON → localStorage の順） ▼
+    try {
+      // 1) beneficiaries テーブル（新）
+      const { data: benRows, error: benErr } = await supabase
+        .from("beneficiaries")
+        .select("name, percent, sort_order")
+        .eq("user_id", user.id)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      let bens: Beneficiary[] = [];
+      if (!benErr && benRows && benRows.length) {
+        bens = benRows.map((r: any) => ({
+          name: String(r.name ?? ""),
+          percent: Number(r.percent) || 0,
+        }));
+      } else {
+        // 2) 旧保存先（JSON）assets_prefs.allocations.beneficiaries を試す
+        const { data: apRow } = await supabase
+          .from("assets_prefs")
+          .select("allocations")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        const arr = (apRow as any)?.allocations?.beneficiaries;
+        if (Array.isArray(arr) && arr.length) {
+          bens = arr.map((b: any) => ({
+            name: String(b.name ?? ""),
+            percent: Number(b.percent) || 0,
+          }));
+        } else {
+          // 3) localStorage フォールバック
+          bens = loadBeneficiariesFromLocal();
+        }
+      }
+      setBeneficiaries(bens);
+    } catch (e) {
+      // 例外時も最低限フォールバック
+      setBeneficiaries(loadBeneficiariesFromLocal());
+    }
   })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [userEmail]);
@@ -321,26 +386,25 @@ function cancelEdit() {
         <div className="lg:col-span-2">
           <div className="rounded-2xl bg-white p-6 shadow ring-1 ring-emerald-200/70">
             <div className="flex items-center justify-between mb-4">
-  <h2 className="text-lg font-semibold">プロフィールの確認・編集</h2>
-
-  {!isEditing ? (
-    <button
-      type="button"
-      onClick={startEdit}
-      className="rounded-xl border border-emerald-600 px-3 py-1.5 text-emerald-700 hover:bg-emerald-50 transition text-sm"
-    >
-      編集
-    </button>
-  ) : (
-    <button
-      type="button"
-      onClick={cancelEdit}
-      className="rounded-xl px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 transition"
-    >
-      キャンセル
-    </button>
-  )}
-</div>
+              <h2 className="text-lg font-semibold">プロフィールの確認・編集</h2>
+              {!isEditing ? (
+                <button
+                  type="button"
+                  onClick={startEdit}
+                  className="rounded-xl border border-emerald-600 px-3 py-1.5 text-emerald-700 hover:bg-emerald-50 transition text-sm"
+                >
+                  編集
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="rounded-xl px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 transition"
+                >
+                  キャンセル
+                </button>
+              )}
+            </div>
 
             {msg && <p className="mb-3 text-sm text-emerald-700">{msg}</p>}
             {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
@@ -415,6 +479,56 @@ function cancelEdit() {
                   </div>
                 </div>
               </div>
+        {/* 受益者配分（閲覧専用・バランス調整版） */}
+<div className="mt-6 rounded-2xl bg-white p-5 shadow ring-1 ring-emerald-200/70">
+  <div className="flex items-center justify-between mb-3">
+    <h2 className="text-base font-semibold">受益者配分</h2>
+    <a
+      href="/assets"
+      className="rounded-xl border border-emerald-600 px-3 py-1 text-emerald-700 hover:bg-emerald-50 text-xs"
+    >
+      編集する
+    </a>
+  </div>
+
+  {/* 合計＆人数のバッジ */}
+  <div className="mb-3 flex items-center gap-2">
+    <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium px-2 py-0.5">
+      合計 {totalPct}%
+    </span>
+    <span className="inline-flex items-center rounded-full bg-gray-50 text-gray-700 text-xs px-2 py-0.5">
+      受益者 {beneficiaries.length} 名
+    </span>
+  </div>
+
+  {visibleBeneficiaries.length ? (
+    <ul className="space-y-2">
+      {visibleBeneficiaries.map((b, i) => (
+        <li key={i} className="rounded-lg border border-emerald-100/70 p-2.5">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="truncate pr-2 text-sm font-medium">{b.name || `受益者${i + 1}`}</span>
+            <span className="text-xs text-gray-600 tabular-nums">{b.percent}%</span>
+          </div>
+          <div className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className={`h-2.5 rounded-full ${b.percent >= 50 ? "bg-emerald-600" : "bg-emerald-500"}`}
+              style={{ width: `${Math.max(0, Math.min(100, b.percent))}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <div className="text-sm text-gray-600">
+      0% を除く表示可能な受益者がいません。<a href="/assets" className="text-emerald-700 underline">/assets</a> で設定してください。
+    </div>
+  )}
+
+  <p className="mt-3 text-[11px] leading-4 text-gray-500">
+    ※ HOMEでは閲覧のみ。編集は右上の「編集する」から /assets へ。
+  </p>
+</div>
+
 
               <div className="md:col-span-2 flex items-center gap-3 mt-2">
                 <button

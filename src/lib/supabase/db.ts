@@ -13,14 +13,27 @@ export type AddressInput = {
 // 受益者（名前と比率）
 export type BeneficiaryInput = { name: string; percent: number };
 
-/**
- * Assets画面からの保存：
- * - profiles.address / profiles.address_json に住所を保存
- * - assets_prefs.allocations に beneficiaries をJSONで保存
- *
- * ※ 既存のスキーマ（profiles: id/email/full_name/address/address_json, assets_prefs: user_id/allocations/risk_profile）に合わせています
- * ※ beneficiaries 用の新テーブルは作りません
- */
+/* ★ 追加：受益者を beneficiaries テーブルに保存（全置換） */
+async function replaceBeneficiariesForUser(user_id: string, bens: BeneficiaryInput[]) {
+  const { error: delErr } = await supabase
+    .from("beneficiaries")
+    .delete()
+    .eq("user_id", user_id);
+  if (delErr) throwSB(delErr, "beneficiaries.delete");
+
+  // 2) 一括挿入（表示順を sort_order に保持）
+  if (bens.length) {
+    const rows = bens.map((b, i) => ({
+      user_id,
+      name: b.name,
+      percent: b.percent,
+      sort_order: i,
+    }));
+    const { error: insErr } = await supabase.from("beneficiaries").insert(rows);
+    if (insErr) throwSB(insErr, "beneficiaries.insert");
+  }
+}
+
 export async function saveAssets(
   address: AddressInput,
   beneficiaries: BeneficiaryInput[]
@@ -76,6 +89,8 @@ export async function saveAssets(
       );
     if (error) throwSB(error, "assets_prefs.upsert");
   }
+  // ★ ココ！ 関数の末尾で呼ぶ（同じスコープに user_id / beneficiaries がある）
+  await replaceBeneficiariesForUser(user_id, beneficiaries);
 }
 
 /**

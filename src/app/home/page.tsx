@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import BeneficiariesForm from "@/components/beneficiaries-form";
+
 
 // ==== Types (元のまま) ====
 type Session = { phone: string; loggedInAt: string };
@@ -15,8 +17,15 @@ type TestResult = {
   score: number;
   meta: Record<string, any>;
 };
-// ★追加: 受益者配分の型（assets と合わせる）20250922
-type Beneficiary = { id?: string; name: string; percent: number };
+
+// 受益者配分の型　20250922
+type Beneficiary = {
+  id?: string;
+  name: string;
+  percent: number;
+  relation?: string;       // 追加：続き柄（父/母/…/その他）
+  relationNote?: string;   // 追加：続き柄=その他の際の補足テキスト
+};
 
 // ==== Helpers ====
 const PHONE_11 = /^\d{11}$/;
@@ -48,11 +57,21 @@ function loadBeneficiariesFromLocal(): Beneficiary[] {
     if (!raw) return [];
     const obj = JSON.parse(raw);
     const arr = obj?.beneficiaries ?? [];
-    return Array.isArray(arr) ? arr.map((b: any) => ({ name: b.name, percent: Number(b.percent) || 0 })) : [];
+
+    return Array.isArray(arr)
+      ? arr.map((b: any) => ({
+          name: String(b.name ?? ""),
+          percent: Number(b.percent) || 0,
+          relation: b.relation ? String(b.relation) : undefined,
+          relationNote: b.relationNote ? String(b.relationNote) : undefined,
+        }))
+      : [];
+
   } catch {
     return [];
   }
 }
+
 // Supabaseのaddress_json→表示用文字列
 function formatAddressText(a?: {
   postalCode?: string | null;
@@ -99,7 +118,8 @@ export default function HomeDashboard() {
   // Supabase の認証状態（唯一の真実）
   const [authChecked, setAuthChecked] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-
+  // 20250922
+  const [userId, setUserId] = useState<string | null>(null);
   // 表示データ（従来のまま）
   const [hydrated, setHydrated] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -107,7 +127,7 @@ export default function HomeDashboard() {
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [phoneEdit, setPhoneEdit] = useState("");
-  const snapshotRef = useRef<Profile | null>(null);
+  const snapshotRef = useRef<(Profile & { beneficiaries: Beneficiary[] }) | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [results, setResults] = useState<TestResult[]>([]);
@@ -178,7 +198,9 @@ export default function HomeDashboard() {
       birthday: p.birthday ?? "",
       email: p.email ?? "",
       address: resolvedAddress,
+      beneficiaries, // ← ここを追加！（現時点の state をスナップショットに含める）
     };
+
 
     if (!p.address && resolvedAddress) saveJSON("ss_profile", { ...p, address: resolvedAddress });
 
@@ -198,6 +220,7 @@ useEffect(() => {
     // まずサインイン中の user.id を取得
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    setUserId(user.id); // ← 追加（以降の保存で使う）
 
     // プロフィール：address優先、無ければaddress_jsonを整形
     const { data: profile } = await supabase
@@ -237,17 +260,23 @@ useEffect(() => {
     try {
       // 1) beneficiaries テーブル（新）
       const { data: benRows, error: benErr } = await supabase
-        .from("beneficiaries")
-        .select("name, percent, sort_order")
-        .eq("user_id", user.id)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true });
+
+          .from("beneficiaries")
+          .select("name, percent, sort_order, relation, relation_note")   // ← 2列追加
+          .eq("user_id", user.id)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true });
+
 
       let bens: Beneficiary[] = [];
       if (!benErr && benRows && benRows.length) {
         bens = benRows.map((r: any) => ({
           name: String(r.name ?? ""),
           percent: Number(r.percent) || 0,
+
+          relation: r.relation ? String(r.relation) : undefined,
+          relationNote: r.relation_note ? String(r.relation_note) : undefined,
+
         }));
       } else {
         // 2) 旧保存先（JSON）assets_prefs.allocations.beneficiaries を試す
@@ -262,6 +291,10 @@ useEffect(() => {
           bens = arr.map((b: any) => ({
             name: String(b.name ?? ""),
             percent: Number(b.percent) || 0,
+
+            relation: b.relation ? String(b.relation) : undefined,
+            relationNote: b.relationNote ? String(b.relationNote) : undefined,
+
           }));
         } else {
           // 3) localStorage フォールバック
@@ -269,6 +302,12 @@ useEffect(() => {
         }
       }
       setBeneficiaries(bens);
+
+        if (!isEditing && snapshotRef.current) {
+          snapshotRef.current = { ...snapshotRef.current, beneficiaries: bens };
+        }
+
+
     } catch (e) {
       // 例外時も最低限フォールバック
       setBeneficiaries(loadBeneficiariesFromLocal());
@@ -311,7 +350,7 @@ useEffect(() => {
   // --- Actions ---
   function startEdit() {
   // いま画面に出ている値をバックアップ（念のため最新化）
-  snapshotRef.current = { fullName, birthday, email, address };
+  snapshotRef.current = { fullName, birthday, email, address, beneficiaries };
   setIsEditing(true);
 }
 
@@ -351,7 +390,7 @@ function cancelEdit() {
     saveJSON("ss_account", nextAcc);
 
     setMsg("保存しました。");
-      snapshotRef.current = { fullName, birthday, email, address }; // 新しい値で更新
+      snapshotRef.current = { fullName, birthday, email, address, beneficiaries }; // 新しい値で更新
     setIsEditing(false);                                            // 編集終了
     setTimeout(() => setMsg(null), 1500);
     setSaving(false);
@@ -382,167 +421,138 @@ function cancelEdit() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左：プロフィール＋アカウント（閲覧→編集） */}
-        <div className="lg:col-span-2">
-          <div className="rounded-2xl bg-white p-6 shadow ring-1 ring-emerald-200/70">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">プロフィールの確認・編集</h2>
-              {!isEditing ? (
-                <button
-                  type="button"
-                  onClick={startEdit}
-                  className="rounded-xl border border-emerald-600 px-3 py-1.5 text-emerald-700 hover:bg-emerald-50 transition text-sm"
-                >
-                  編集
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={cancelEdit}
-                  className="rounded-xl px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 transition"
-                >
-                  キャンセル
-                </button>
-              )}
-            </div>
 
-            {msg && <p className="mb-3 text-sm text-emerald-700">{msg}</p>}
-            {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+      {/* 左：プロフィール＋アカウント（閲覧→編集） */}
+<div className="lg:col-span-2">
+  <div className="rounded-2xl bg-white p-6 shadow ring-1 ring-emerald-200/70">
+    <div className="flex items-center justify-between mb-4">
+      <h2 className="text-lg font-semibold">プロフィールの確認・編集</h2>
+      {!isEditing ? (
+        <button
+          type="button"
+          onClick={startEdit}
+          className="rounded-xl border border-emerald-600 px-3 py-1.5 text-emerald-700 hover:bg-emerald-50 transition text-sm"
+        >
+          編集
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={cancelEdit}
+          className="rounded-xl px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 transition"
+        >
+          キャンセル
+        </button>
+      )}
+    </div>
 
-            <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={saveAll}>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">氏名</label>
-                <input
-                  className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="山田 太郎"
-                  disabled={!isEditing}
-                />
+    {msg && <p className="mb-3 text-sm text-emerald-700">{msg}</p>}
+    {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
 
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">誕生日</label>
-                <input
-                  className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
-                  type="date"
-                  value={birthday}
-                  onChange={(e) => setBirthday(e.target.value)}
-                  min="1900-01-01"
-                  max={todayStr}
-                  disabled={!isEditing}
-                />
+    <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={saveAll}>
+      {/* 氏名 */}
+      <div>
+        <label className="block text-sm text-gray-600 mb-1">氏名</label>
+        <input
+          className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          placeholder="山田 太郎"
+          disabled={!isEditing}
+        />
+      </div>
 
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">メール</label>
-                <input
-                  className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="taro@example.com"
-                  disabled={!isEditing}
-                />
 
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">住所</label>
-                <input
-                  className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="東京都千代田区…"
-                  disabled={!isEditing}
-                />
+      {/* 誕生日 */}
+      <div>
+        <label className="block text-sm text-gray-600 mb-1">誕生日</label>
+        <input
+          className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
+          type="date"
+          value={birthday}
+          onChange={(e) => setBirthday(e.target.value)}
+          min="1900-01-01"
+          max={todayStr}
+          disabled={!isEditing}
+        />
+      </div>
 
-              </div>
+      {/* メール */}
+      <div>
+        <label className="block text-sm text-gray-600 mb-1">メール</label>
+        <input
+          className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="taro@example.com"
+          disabled={!isEditing}
+        />
+      </div>
 
-              <div className="md:col-span-2 border-t pt-4 mt-2">
-                <h3 className="text-sm font-medium mb-2">アカウント（電話）</h3>
-                <a className="text-sm text-emerald-700 underline mt-1 inline-block" href="/account/password">
-                  パスワードを変更する
-                </a>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">電話番号（11桁）</label>
-                    <input
-                        className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
-                        inputMode="numeric"
-                        maxLength={11}
-                        value={phoneEdit}
-                        onChange={(e) => setPhoneEdit(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                        placeholder="090xxxxxxxx"
-                        disabled={!isEditing}
-                      />
+      {/* 住所 */}
+      <div>
+        <label className="block text-sm text-gray-600 mb-1">住所</label>
+        <input
+          className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="東京都千代田区…"
+          disabled={!isEditing}
+        />
+      </div>
 
-                  </div>
-                </div>
-              </div>
-        {/* 受益者配分（閲覧専用・バランス調整版） */}
-<div className="mt-6 rounded-2xl bg-white p-5 shadow ring-1 ring-emerald-200/70">
-  <div className="flex items-center justify-between mb-3">
-    <h2 className="text-base font-semibold">受益者配分</h2>
-    <a
-      href="/assets"
-      className="rounded-xl border border-emerald-600 px-3 py-1 text-emerald-700 hover:bg-emerald-50 text-xs"
-    >
-      編集する
-    </a>
-  </div>
-
-  {/* 合計＆人数のバッジ */}
-  <div className="mb-3 flex items-center gap-2">
-    <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium px-2 py-0.5">
-      合計 {totalPct}%
-    </span>
-    <span className="inline-flex items-center rounded-full bg-gray-50 text-gray-700 text-xs px-2 py-0.5">
-      受益者 {beneficiaries.length} 名
-    </span>
-  </div>
-
-  {visibleBeneficiaries.length ? (
-    <ul className="space-y-2">
-      {visibleBeneficiaries.map((b, i) => (
-        <li key={i} className="rounded-lg border border-emerald-100/70 p-2.5">
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="truncate pr-2 text-sm font-medium">{b.name || `受益者${i + 1}`}</span>
-            <span className="text-xs text-gray-600 tabular-nums">{b.percent}%</span>
-          </div>
-          <div className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
-            <div
-              className={`h-2.5 rounded-full ${b.percent >= 50 ? "bg-emerald-600" : "bg-emerald-500"}`}
-              style={{ width: `${Math.max(0, Math.min(100, b.percent))}%` }}
+      {/* アカウント（電話） */}
+      <div className="md:col-span-2 border-t pt-4 mt-2">
+        <h3 className="text-sm font-medium mb-2">アカウント（電話）</h3>
+        <a className="text-sm text-emerald-700 underline mt-1 inline-block" href="/account/password">
+          パスワードを変更する
+        </a>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">電話番号（11桁）</label>
+            <input
+              className={`w-full rounded border px-3 py-2 ${!isEditing ? "bg-gray-50 text-gray-600" : ""}`}
+              inputMode="numeric"
+              maxLength={11}
+              value={phoneEdit}
+              onChange={(e) => setPhoneEdit(e.target.value.replace(/\D/g, "").slice(0, 11))}
+              placeholder="090xxxxxxxx"
+              disabled={!isEditing}
             />
           </div>
-        </li>
-      ))}
-    </ul>
-  ) : (
-    <div className="text-sm text-gray-600">
-      0% を除く表示可能な受益者がいません。<a href="/assets" className="text-emerald-700 underline">/assets</a> で設定してください。
-    </div>
-  )}
+        </div>
+      </div>
 
-  <p className="mt-3 text-[11px] leading-4 text-gray-500">
-    ※ HOMEでは閲覧のみ。編集は右上の「編集する」から /assets へ。
-  </p>
+      {/* 受益者配分（同一ページ編集） */}
+      <div className="md:col-span-2">
+        {userId && (
+          <BeneficiariesForm
+            value={beneficiaries}
+            onChange={setBeneficiaries}
+            userId={userId}
+            disabled={!isEditing}   // ← 編集中だけ操作可能
+          />
+        )}
+      </div>
+
+
+      {/* 保存ボタン（プロフィール用） */}
+      <div className="md:col-span-2 flex items-center gap-3 mt-2">
+        <button
+          className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60 hover:bg-emerald-700 shadow-sm"
+          type="submit"
+          disabled={!isEditing || saving}
+        >
+          {saving ? "保存中…" : "保存する"}
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 
 
-              <div className="md:col-span-2 flex items-center gap-3 mt-2">
-                <button
-                  className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60 hover:bg-emerald-700 shadow-sm"
-                  type="submit"
-                  disabled={!isEditing || saving}
-                    >
-                      {saving ? "保存中…" : "保存する"}
-                    </button>
 
-              </div>
-            </form>
-          </div>
-        </div>
 
         {/* 右：アプリ & 最近の結果 */}
         <div className="space-y-6">

@@ -17,6 +17,8 @@ type TestResult = {
   score: number;
   meta: Record<string, any>;
 };
+// ★追加: 受益者配分の型（assets と合わせる）20250922
+type Beneficiary = { id?: string; name: string; percent: number };
 
 // 受益者配分の型　20250922
 type Beneficiary = {
@@ -58,6 +60,7 @@ function loadBeneficiariesFromLocal(): Beneficiary[] {
     if (!raw) return [];
     const obj = JSON.parse(raw);
     const arr = obj?.beneficiaries ?? [];
+
     return Array.isArray(arr)
       ? arr.map((b: any) => ({
           name: String(b.name ?? ""),
@@ -66,6 +69,7 @@ function loadBeneficiariesFromLocal(): Beneficiary[] {
           relationNote: b.relationNote ? String(b.relationNote) : undefined,
         }))
       : [];
+
   } catch {
     return [];
   }
@@ -259,19 +263,23 @@ useEffect(() => {
     try {
       // 1) beneficiaries テーブル（新）
       const { data: benRows, error: benErr } = await supabase
+
           .from("beneficiaries")
           .select("name, percent, sort_order, relation, relation_note")   // ← 2列追加
           .eq("user_id", user.id)
           .order("sort_order", { ascending: true })
           .order("created_at", { ascending: true });
 
+
       let bens: Beneficiary[] = [];
       if (!benErr && benRows && benRows.length) {
         bens = benRows.map((r: any) => ({
           name: String(r.name ?? ""),
           percent: Number(r.percent) || 0,
+
           relation: r.relation ? String(r.relation) : undefined,
           relationNote: r.relation_note ? String(r.relation_note) : undefined,
+
         }));
       } else {
         // 2) 旧保存先（JSON）assets_prefs.allocations.beneficiaries を試す
@@ -286,8 +294,10 @@ useEffect(() => {
           bens = arr.map((b: any) => ({
             name: String(b.name ?? ""),
             percent: Number(b.percent) || 0,
+
             relation: b.relation ? String(b.relation) : undefined,
             relationNote: b.relationNote ? String(b.relationNote) : undefined,
+
           }));
         } else {
           // 3) localStorage フォールバック
@@ -295,9 +305,11 @@ useEffect(() => {
         }
       }
       setBeneficiaries(bens);
+
         if (!isEditing && snapshotRef.current) {
           snapshotRef.current = { ...snapshotRef.current, beneficiaries: bens };
         }
+
 
     } catch (e) {
       // 例外時も最低限フォールバック
@@ -412,6 +424,7 @@ function cancelEdit() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
       {/* 左：プロフィール＋アカウント（閲覧→編集） */}
 <div className="lg:col-span-2">
   <div className="rounded-2xl bg-white p-6 shadow ring-1 ring-emerald-200/70">
@@ -451,6 +464,7 @@ function cancelEdit() {
           disabled={!isEditing}
         />
       </div>
+
 
       {/* 誕生日 */}
       <div>
@@ -525,6 +539,7 @@ function cancelEdit() {
         )}
       </div>
 
+
       {/* 保存ボタン（プロフィール用） */}
       <div className="md:col-span-2 flex items-center gap-3 mt-2">
         <button
@@ -538,6 +553,7 @@ function cancelEdit() {
     </form>
   </div>
 </div>
+
 
 
 

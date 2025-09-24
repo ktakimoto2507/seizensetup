@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getAssets, deleteAsset, type Asset } from "@/lib/assets.supa";
+import { getAssets, deleteAsset, type Asset } from "@/lib/assets.repo";
 
 type Currency = "JPY" | "USD";
 

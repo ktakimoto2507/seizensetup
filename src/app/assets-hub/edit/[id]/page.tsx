@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { getAssets, updateAsset, type Asset, AssetTypeEnum } from "@/lib/assets.supa";
+import { getAssets, updateAsset, type Asset, AssetTypeEnum } from "@/lib/assets.repo";
 
 // フォームスキーマ（amount は coerce.number で統一）
 const FormSchema = z.object({

@@ -138,6 +138,20 @@ export default function HomeDashboard() {
   const [saving, setSaving] = useState(false);
 
   const recent = useMemo(() => results.slice(-5).reverse(), [results]);
+  // ▼ 直近プレイのアプリを特定し、そのアプリの履歴だけ2〜3件に絞る
+  const latestAppId = useMemo(
+    () => (recent[0] ? normalizeResultId(recent[0]) : null),
+    [recent]
+  );
+  const recentByLatestApp = useMemo(
+    () => (latestAppId ? recent.filter(r => normalizeResultId(r) === latestAppId).slice(0, 3) : []),
+    [recent, latestAppId]
+  );
+  const latestAppLabel = useMemo(
+    () => (latestAppId ? (APP_INFO as any)[latestAppId]?.name ?? latestAppId : null),
+    [latestAppId]
+  );
+
   const todayStr = useMemo(() => {
     const t = new Date(); const y = t.getFullYear();
     const m = String(t.getMonth() + 1).padStart(2, "0");
@@ -554,36 +568,61 @@ function cancelEdit() {
 
 
 
-        {/* 右：アプリ & 最近の結果 */}
-        <div className="space-y-6">
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <h2 className="text-lg font-semibold mb-3">アプリ</h2>
-            <div className="grid grid-cols-1 gap-3">
-              <a href="/apps/ex00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-600 text-emerald-700">記憶力診断</a>
-              <a href="/apps/deus00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-600 text-emerald-700">タイピング測定（百人一首）</a>
-              <a href="/apps/machina00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-600 text-emerald-700">座標当てゲーム</a>
-            </div>
-          </div>
+{/* 右：①〜⑤の入口（縦並び）＋ ⑥その他アプリ（直近プレビュー） */}
+<div className="space-y-6">
 
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <h2 className="text-lg font-semibold mb-3">最近の結果（最新5件）</h2>
-            {recent.length ? (
-              <div className="space-y-2">
-                {recent.map((r: any, i: number) => (
-                  <div key={i} className="text-sm py-2 border-b last:border-0">
-                    ：{renderScoreLine(r)}
-                    <div className="text-xs text-gray-500">
-                      {r?.finishedAt ? new Date(r.finishedAt).toLocaleString() : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-600">まだ結果はありません。</p>
-            )}
-          </div>
-        </div>
-      </div>
+  {/* ①〜⑤：縦並びの“入口カード”（中身は別ページに遷移） */}
+  <div className="rounded-2xl bg-white p-6 shadow">
+    <h2 className="text-lg font-semibold mb-3">生前整理メニュー</h2>
+    <div className="grid grid-cols-1 gap-3">
+      <a href="/assets"   className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">① 資産管理（資産リスト化）</a>
+      <a href="/heritage" className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">② 相続・分配</a>
+      <a href="/family"   className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">③ 家族・共有</a>
+      <a href="/life"     className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">④ ライフ整理</a>
+      <a href="/security" className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">⑤ セキュリティ・安心</a>
+    </div>
+  </div>
+
+  {/* ⑥：その他アプリ（ex00/deus00/machina00）＋ 直近プレイのアプリだけ2〜3件プレビュー */}
+  <div className="rounded-2xl bg-white p-6 shadow">
+    <div className="flex items-center justify-between mb-3">
+      <h2 className="text-lg font-semibold">⑥ その他アプリ</h2>
+      <a href="/apps" className="text-sm text-emerald-700 hover:underline">一覧へ</a>
+    </div>
+
+    <div className="grid grid-cols-1 gap-3 mb-4">
+      <a href="/apps/ex00"     className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-300 text-emerald-700">記憶力診断（ex00）</a>
+      <a href="/apps/deus00"   className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-300 text-emerald-700">タイピング測定（deus00）</a>
+      <a href="/apps/machina00" className="rounded-xl border px-4 py-3 text-center hover:bg-emerald-50 border-emerald-300 text-emerald-700">座標当て（machina00）</a>
+    </div>
+
+    <div className="border-t pt-3">
+      <h3 className="text-sm font-medium mb-2">直近プレイ：</h3>
+      {latestAppId ? (
+        <>
+          <p className="text-sm mb-2">
+            <span className="inline-block rounded bg-emerald-50 px-2 py-0.5 text-emerald-700 mr-2">{latestAppLabel}</span>
+            最近の履歴（{recentByLatestApp.length}件）
+          </p>
+          <ul className="space-y-2">
+            {recentByLatestApp.map((r, i) => (
+              <li key={i} className="text-sm">
+                ・{renderScoreLine(r)}
+                <div className="text-xs text-gray-500">
+                  {r?.finishedAt ? new Date(r.finishedAt).toLocaleString() : ""}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-gray-500 mt-2">※ 直近にプレイしたアプリだけを表示しています</p>
+        </>
+      ) : (
+        <p className="text-sm text-gray-600">まだプレイ履歴がありません。</p>
+      )}
+    </div>
+  </div>
+</div>
+     </div>
     </main>
   );
 }

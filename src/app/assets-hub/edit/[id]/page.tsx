@@ -1,45 +1,80 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useForm, type SubmitHandler, type Resolver } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { addAsset, AssetTypeEnum } from "@/lib/assets.supa";
+import { getAssets, updateAsset, type Asset, AssetTypeEnum } from "@/lib/assets.supa";
 
-// ① amount を安全に数値へ（空文字や未入力は 0）
+// フォームスキーマ（amount は coerce.number で統一）
 const FormSchema = z.object({
   type: AssetTypeEnum,
   name: z.string().min(1, "名称は必須です"),
-  amount: z.preprocess(
-    (v) => (v === "" || v === null || v === undefined ? 0 : Number(v)),
-    z.number().finite().nonnegative()
-  ),
+  amount: z.coerce.number().finite().nonnegative(),
   currency: z.enum(["JPY", "USD"]),
   note: z.string().max(1000).optional().nullable(),
 });
 type FormValues = z.infer<typeof FormSchema>;
 
-export default function AssetNewPage() {
+export default function AssetEditPage() {
   const router = useRouter();
+  const params = useParams();
+  const id = useMemo(() => String((params as { id?: string })?.id || ""), [params]);
+
+  const [current, setCurrent] = useState<Asset | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    // ② Resolver の型を明示
-    resolver: zodResolver(FormSchema) as Resolver<FormValues>,
+    resolver: zodResolver(FormSchema) as unknown as import("react-hook-form").Resolver<FormValues>,
     defaultValues: {
       type: "bank",
+      name: "",
+      amount: 0,
       currency: "JPY",
-      amount: 0,        // ③ 初期値を数値で
       note: "",
     },
   });
 
-  // ④ SubmitHandler で型を固定
+  // 既存データのロード（非同期対応）
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const list = await getAssets();                         // ← await を追加
+      const found = list.find((a: Asset) => a.id === id) || null; // ← a: Asset を明示
+
+      if (!alive) return;
+      if (!found) {
+        setNotFound(true);
+        return;
+      }
+      setCurrent(found);
+      reset({
+        type: found.type,
+        name: found.name,
+        amount: found.amount,
+        currency: found.currency,
+        note: found.note ?? "",
+      });
+    })().catch((e) => {
+      console.error(e);
+      if (alive) setNotFound(true);
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [id, reset]);
+
+
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
-    await addAsset({
+    if (!id) return;
+    await updateAsset(id, {
       type: values.type,
       name: values.name.trim(),
       amount: values.amount,
@@ -49,9 +84,29 @@ export default function AssetNewPage() {
     router.push("/assets-hub/list");
   };
 
+  if (notFound) {
+    return (
+      <main className="max-w-xl mx-auto px-4 py-10 space-y-6">
+        <h1 className="text-xl font-semibold">データが見つかりません</h1>
+        <p className="text-gray-700">指定された資産は存在しないか、削除されています。</p>
+        <a href="/assets-hub/list" className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+          ← 一覧へ戻る
+        </a>
+      </main>
+    );
+  }
+
+  if (!current) {
+    return (
+      <main className="max-w-xl mx-auto px-4 py-10">
+        <div className="animate-pulse text-gray-500">読み込み中...</div>
+      </main>
+    );
+  }
+
   return (
     <main className="max-w-xl mx-auto px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">資産を追加</h1>
+      <h1 className="text-xl font-semibold">資産を編集</h1>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {/* type */}
@@ -123,9 +178,9 @@ export default function AssetNewPage() {
             disabled={isSubmitting}
             className="rounded-xl bg-emerald-600 text-white px-4 py-2 hover:bg-emerald-700 disabled:opacity-60"
           >
-            追加する
+            保存する
           </button>
-          <a href="/assets-hub" className="rounded-xl border px-4 py-2 hover:bg-gray-50">
+          <a href="/assets-hub/list" className="rounded-xl border px-4 py-2 hover:bg-gray-50">
             キャンセル
           </a>
         </div>

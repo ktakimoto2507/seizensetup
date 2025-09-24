@@ -577,7 +577,7 @@ function cancelEdit() {
   <div className="rounded-2xl bg-white p-6 shadow">
     <h2 className="text-lg font-semibold mb-3">生前整理メニュー</h2>
     <div className="grid grid-cols-1 gap-3">
-      <a href="/assets"   className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">① 資産管理（資産リスト化）</a>
+      <a href="/assets-hub"   className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">① 資産管理（資産リスト化）</a>
       <a href="/heritage" className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">② 相続・分配</a>
       <a href="/family"   className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">③ 家族・共有</a>
       <a href="/life"     className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700 no-underline">④ ライフ整理</a>

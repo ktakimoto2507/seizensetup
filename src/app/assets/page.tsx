@@ -9,6 +9,20 @@ import { useRouter } from "next/navigation";
 import { saveAssets } from "@/lib/supabase/db";
 import { upsertAssets } from "@/lib/supabase/db";
 
+// ▼ 追加：初期値ユーティリティ（imports の直下に置く）
+const DEFAULT_ADDRESS = {
+  postalCode: "",
+  prefecture: "",
+  city: "",
+  town: "",
+  line1: "",
+};
+
+const freshBeneficiaries = (): Beneficiary[] => [
+  { id: Math.random().toString(36).slice(2, 9), name: "受益者A", percent: 100 },
+];
+
+
 // ルートガード：step < 2 なら適切なページへ戻す
 function useAssetsGuard() {
   const router = useRouter();
@@ -76,8 +90,38 @@ export default function AssetsPage() {
   const [zipLoading, setZipLoading] = useState(false);
   const [zipErr, setZipErr] = useState<string>("");
 
-  // ステップを2に固定
-  useEffect(() => { setStep(2); }, [setStep]);
+  // ステップを2に固定 delete 20250924
+  // ★ 入場時に住所＆受益者を毎回まっさらに初期化
+const didInit = useRef(false);
+useEffect(() => {
+  if (didInit.current) return;
+  didInit.current = true;
+
+  setStep(2);
+
+  const freshAddr = { ...DEFAULT_ADDRESS };
+  const freshBens = freshBeneficiaries();
+
+  // Zustand ストアを初期化
+  setAddress(freshAddr);
+  setBeneficiaries(freshBens);
+
+  // persist(localStorage) 側も上書きして再水和で負けないようにする
+  try {
+    const k = "seizensetup_store_v1";
+    const raw = localStorage.getItem(k);
+    if (raw) {
+      const json = JSON.parse(raw);
+      if (json && typeof json === "object") {
+        json.address = freshAddr;
+        json.beneficiaries = freshBens;
+        json.step = 2; // 任意
+        localStorage.setItem(k, JSON.stringify(json));
+      }
+    }
+  } catch { /* noop */ }
+}, [setStep, setAddress, setBeneficiaries]);
+
 
   // 合計100%表示
   const total = useMemo(() => beneficiaries.reduce((s, b) => s + b.percent, 0), [beneficiaries]);
@@ -247,3 +291,4 @@ export default function AssetsPage() {
     </div>
   );
 }
+

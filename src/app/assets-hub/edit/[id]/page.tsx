@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { getAssets, updateAsset, type Asset, AssetTypeEnum } from "@/lib/assets";
+import { getAssets, updateAsset, type Asset, AssetTypeEnum } from "@/lib/assets.supa";
 
 // フォームスキーマ（amount は coerce.number で統一）
 const FormSchema = z.object({
@@ -41,27 +41,40 @@ export default function AssetEditPage() {
     },
   });
 
-  // 既存データのロード
+  // 既存データのロード（非同期対応）
   useEffect(() => {
-    const list = getAssets();
-    const found = list.find((a) => a.id === id) || null;
-    if (!found) {
-      setNotFound(true);
-      return;
-    }
-    setCurrent(found);
-    reset({
-      type: found.type,
-      name: found.name,
-      amount: found.amount,
-      currency: found.currency,
-      note: found.note ?? "",
+    let alive = true;
+    (async () => {
+      const list = await getAssets();                         // ← await を追加
+      const found = list.find((a: Asset) => a.id === id) || null; // ← a: Asset を明示
+
+      if (!alive) return;
+      if (!found) {
+        setNotFound(true);
+        return;
+      }
+      setCurrent(found);
+      reset({
+        type: found.type,
+        name: found.name,
+        amount: found.amount,
+        currency: found.currency,
+        note: found.note ?? "",
+      });
+    })().catch((e) => {
+      console.error(e);
+      if (alive) setNotFound(true);
     });
+
+    return () => {
+      alive = false;
+    };
   }, [id, reset]);
+
 
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
     if (!id) return;
-    updateAsset(id, {
+    await updateAsset(id, {
       type: values.type,
       name: values.name.trim(),
       amount: values.amount,

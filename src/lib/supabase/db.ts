@@ -1,5 +1,6 @@
 // src/lib/supabase/db.ts
 import { supabase } from "./client";
+export { supabase } from "./client";
 
 // 住所入力の型（line2 は使いません）
 export type AddressInput = {
@@ -182,7 +183,7 @@ export async function upsertProfile(args: UpsertProfileArgs) {
   if (error) throw error;
 }
 
-export async function upsertAssets(args: {
+export async function upsertAssetsPrefs(args: {
   address_json: {
     postalCode?: string;
     prefecture?: string;
@@ -198,7 +199,7 @@ export async function upsertAssets(args: {
   if (!user_id) throw new Error("Not authenticated");
 
   const { error } = await supabase
-    .from("assets")
+    .from("assets_prefs")
     .upsert(
       {
         user_id,
@@ -219,3 +220,5 @@ function throwSB(error: any, where: string) {
     JSON.stringify(error);
   throw new Error(`[${where}] ${msg}`);
 }
+// 後方互換エイリアス：古い呼び出し側（upsertAssets）を生かす
+export { upsertAssetsPrefs as upsertAssets };

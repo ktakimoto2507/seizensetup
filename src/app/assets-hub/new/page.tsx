@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useForm, type SubmitHandler, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { addAsset, AssetTypeEnum } from "@/lib/assets";
+import { addAsset, AssetTypeEnum } from "@/lib/assets.supa";
 
 // ① amount を安全に数値へ（空文字や未入力は 0）
 const FormSchema = z.object({
@@ -39,7 +39,7 @@ export default function AssetNewPage() {
 
   // ④ SubmitHandler で型を固定
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
-    addAsset({
+    await addAsset({
       type: values.type,
       name: values.name.trim(),
       amount: values.amount,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getAssets, deleteAsset, type Asset } from "@/lib/assets";
+import { getAssets, deleteAsset, type Asset } from "@/lib/assets.supa";
 
 type Currency = "JPY" | "USD";
 
@@ -30,17 +30,21 @@ export default function AssetListPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    // 初期読み込み & 削除後リロード
-    setItems(getAssets());
-  }, [refreshKey]);
+  let alive = true;
+  (async () => {
+       const rows = await getAssets();
+       if (alive) setItems(rows);
+     })();
+     return () => { alive = false; };
+   }, [refreshKey]);
 
   const byType = useMemo(() => groupBy(items, (a) => a.type), [items]);
   const total = useMemo(() => sumByCurrency(items), [items]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const ok = confirm("この資産を削除します。よろしいですか？");
     if (!ok) return;
-    const done = deleteAsset(id);
+    const done = await deleteAsset(id);
     if (done) setRefreshKey((n) => n + 1);
   };
 
@@ -115,7 +119,8 @@ export default function AssetListPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {/* 編集は次回実装予定 */}
-                      {/* <a href={`/assets-hub/edit/${a.id}`} className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50">編集</a> */}
+                      <a href={`/assets-hub/edit/${a.id}`} 
+                            className="rounded-lg border px-3 py-1 text-sm hover:bg-gray-50">編集</a>
                       <button
                         onClick={() => handleDelete(a.id)}
                         className="rounded-lg border px-3 py-1 text-sm hover:bg-red-50 border-red-600 text-red-700"

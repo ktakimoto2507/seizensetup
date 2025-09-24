@@ -436,6 +436,7 @@ function cancelEdit() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
+
       {/* 左：プロフィール＋アカウント（閲覧→編集） */}
 <div className="lg:col-span-2">
   <div className="rounded-2xl bg-white p-6 shadow ring-1 ring-emerald-200/70">
@@ -503,6 +504,7 @@ function cancelEdit() {
           disabled={!isEditing}
         />
       </div>
+
 
       {/* 住所 */}
       <div>

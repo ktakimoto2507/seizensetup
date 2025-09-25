@@ -520,7 +520,7 @@ function cancelEdit() {
 
       {/* アカウント（電話） */}
       <div className="md:col-span-2 border-t pt-4 mt-2">
-        <h3 className="text-sm font-medium mb-2">アカウント（電話）</h3>
+        <h3 className="text-sm font-medium mb-2">電話番号</h3>
         <a className="text-sm text-emerald-700 underline mt-1 inline-block" href="/account/password">
           パスワードを変更する
         </a>

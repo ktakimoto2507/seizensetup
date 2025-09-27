@@ -143,6 +143,7 @@ function AllocationsTab() {
   }
 
   if (loading) return <div>読み込み中…</div>;
+
   return (
     <Card title={`受益者配分（合計 ${total}%）`}>
       <div className={`text-sm mb-3 ${totalOk ? "text-green-700" : "text-red-700"}`}>
@@ -369,6 +370,7 @@ function LegalTab() {
   const results = runLegalChecks(heirs, will, estate, { deathDateISO }, { sumPercent: 100 });
 
   return (
+
     <Card title="相続トラブル回避（法的アラート）">
       <div className="mb-3">
   <GuideBox title="クイック設定（例）">
@@ -448,6 +450,7 @@ export default function HeritagePage() {
   const [tab, setTab] = useState<"alloc"|"wishes"|"legal">("alloc");
   return (
     <main className="max-w-3xl mx-auto px-4 py-6">
+
       {/* タイトル＋HOMEへ戻る（見た目をAssetsと統一） */}
       <div className="mb-2 flex items-center justify-between">
         <h1 className="text-xl font-semibold">相続・分配</h1>
@@ -459,6 +462,7 @@ export default function HeritagePage() {
           HOMEへ戻る
         </a>
       </div>
+
       <div className="flex gap-1 border-b mb-4">
         <TabBtn active={tab==="alloc"} onClick={()=>setTab("alloc")}>配分</TabBtn>
         <TabBtn active={tab==="wishes"} onClick={()=>setTab("wishes")}>希望の記録</TabBtn>

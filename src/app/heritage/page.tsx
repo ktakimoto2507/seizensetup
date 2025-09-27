@@ -448,7 +448,17 @@ export default function HeritagePage() {
   const [tab, setTab] = useState<"alloc"|"wishes"|"legal">("alloc");
   return (
     <main className="max-w-3xl mx-auto px-4 py-6">
-      <h1 className="text-xl font-semibold mb-2">相続・分配</h1>
+      {/* タイトル＋HOMEへ戻る（見た目をAssetsと統一） */}
+      <div className="mb-2 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">相続・分配</h1>
+        <a
+          href="/home"
+          className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+          aria-label="HOMEへ戻る"
+        >
+          HOMEへ戻る
+        </a>
+      </div>
       <div className="flex gap-1 border-b mb-4">
         <TabBtn active={tab==="alloc"} onClick={()=>setTab("alloc")}>配分</TabBtn>
         <TabBtn active={tab==="wishes"} onClick={()=>setTab("wishes")}>希望の記録</TabBtn>

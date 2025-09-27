@@ -24,7 +24,20 @@ function fmtMoney(v: number, cur: Currency) {
   const locale = cur === "JPY" ? "ja-JP" : "en-US";
   return v.toLocaleString(locale, { style: "currency", currency: cur });
 }
-
+// ★ JST固定で日付を整形（サーバ/クライアントで一致）
+function fmtJST(isoLike: string | number | Date) {
+  const d = new Date(isoLike);
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Tokyo",
+  }).format(d);
+}
 export default function AssetListPage() {
   const [items, setItems] = useState<Asset[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -54,11 +67,13 @@ export default function AssetListPage() {
     <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       <header className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">登録済み資産の一覧</h1>
+        {/* 右上は HOME 導線（hub/new と統一） */}
         <a
-          href="/assets-hub/new"
-          className="rounded-xl bg-emerald-600 text-white px-4 py-2 hover:bg-emerald-700"
+          href="/home"
+          className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+          aria-label="HOMEへ戻る"
         >
-          ＋ 追加
+          HOMEへ戻る
         </a>
       </header>
 
@@ -110,8 +125,9 @@ export default function AssetListPage() {
                   <li key={a.id} className="py-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-medium break-words">{a.name}</div>
-                      <div className="text-sm text-gray-600">
-                        {fmtMoney(a.amount, a.currency)}・更新: {new Date(a.updatedAt).toLocaleString()}
+                      {/* ★ Hydration差分を防ぐため JST固定＋警告抑止 */}
+                      <div className="text-sm text-gray-600" suppressHydrationWarning>
+                        {fmtMoney(a.amount, a.currency)}・更新: {fmtJST(a.updatedAt)}
                       </div>
                       {a.note ? (
                         <div className="text-sm text-gray-500 mt-1 break-words">メモ：{a.note}</div>

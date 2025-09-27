@@ -1,7 +1,18 @@
 export default function AssetsHubPage() {
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-      <h1 className="text-xl font-semibold">資産管理（ハブ）</h1>
+      {/* タイトル＋HOMEへ戻る */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">資産管理（ハブ）</h1>
+        <a
+          href="/home"
+          className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+          aria-label="HOMEへ戻る"
+        >
+          HOMEへ戻る
+        </a>
+      </div>
+
       <p className="text-gray-700">
         MVPでは「資産の追加・編集・一覧」を提供します。既存の <code>/assets</code> は温存しつつ、
         本ページで新ワークフローを段階的に実装していきます。
@@ -18,10 +29,16 @@ export default function AssetsHubPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3">
-        <a href="/assets-hub/new" className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700">
+        <a
+          href="/assets-hub/new"
+          className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700"
+        >
           資産を追加（プレースホルダー）
         </a>
-        <a href="/assets-hub/list" className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700">
+        <a
+          href="/assets-hub/list"
+          className="rounded-xl border px-4 py-3 hover:bg-emerald-50 border-emerald-600 text-emerald-700"
+        >
           登録済み資産の一覧（プレースホルダー）
         </a>
       </div>

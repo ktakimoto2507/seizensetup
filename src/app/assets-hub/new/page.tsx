@@ -51,7 +51,18 @@ export default function AssetNewPage() {
 
   return (
     <main className="max-w-xl mx-auto px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">資産を追加</h1>
+      {/* タイトル＋HOMEへ戻る */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">資産を追加</h1>
+        {/* NEW: HOMEへ戻る（構成/ロジックを変えないため <a> を採用） */}
+        <a
+          href="/home"
+         className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+         aria-label="HOMEへ戻る"
+       >
+         HOMEへ戻る
+       </a>
+     </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {/* type */}
